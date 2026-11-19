@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Surf Camp Room Board (live from Google Sheets)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F2F5F3; --surface:#FFFFFF; --ink:#132328; --muted:#5D6E71; --line:#DCE4E1; --accent:#0B6E78;
+  --accent-soft:#DDEFEF; --today:#0B6E78; --weekend:#EEF2F0; --warn:#B4610E; --warn-soft:#FBEBD8;
+  --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --body:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --pk-balance-bg:#DCEFD8; --pk-balance-st:#3E8E4F;
+  --pk-surf-bg:#D3E5F6; --pk-surf-st:#2F6FB0;
+  --pk-yoga-bg:#FBEFC4; --pk-yoga-st:#B98A0E;
+  --pk-cyo-bg:#F6D5D3; --pk-cyo-st:#C0453E;
+  --pk-purple-bg:#E3DCF1; --pk-purple-st:#6E56A8;
+  --pk-airbnb-bg:#EBD6CF; --pk-airbnb-st:#8A4B3A;
+  --pk-retreat-bg:#FBE3CC; --pk-retreat-st:#C46A1A;
+  --pk-staff-bg:#E4E8E8; --pk-staff-st:#6B7A7C;
+  --pk-none-bg:#ECEFEF; --pk-none-st:#8A9799;
+  --hatch:rgba(19,35,40,.07);
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0D1618; --surface:#142124; --ink:#E4ECEA; --muted:#8FA2A4; --line:#24363A; --accent:#5BC0C4;
+    --accent-soft:#163A3D; --today:#5BC0C4; --weekend:#111D20; --warn:#F0A55A; --warn-soft:#3A2A17;
+    --pk-balance-bg:#1E3A25; --pk-balance-st:#6CC27E; --pk-surf-bg:#1A3049; --pk-surf-st:#6EA9E6;
+    --pk-yoga-bg:#3A3217; --pk-yoga-st:#E2B93F; --pk-cyo-bg:#432221; --pk-cyo-st:#EB7B72;
+    --pk-purple-bg:#2D2645; --pk-purple-st:#A891E0; --pk-airbnb-bg:#3A2621; --pk-airbnb-st:#C98A77;
+    --pk-retreat-bg:#41291A; --pk-retreat-st:#EE9A52; --pk-staff-bg:#232E30; --pk-staff-st:#96A6A8;
+    --pk-none-bg:#1E292B; --pk-none-st:#8A9799; --hatch:rgba(228,236,234,.08);
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--paper);color:var(--ink);font:15px/1.45 var(--body);-webkit-font-smoothing:antialiased}
+button,input{font:inherit;color:inherit}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.wrap{max-width:1480px;margin:0 auto;padding:24px clamp(16px,3vw,32px) 48px;display:grid;gap:20px}
+.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between}
+.eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:0 0 4px}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(28px,3.4vw,40px);line-height:1.05;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.top-right{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.sync{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:6px 12px}
+.sync .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.sync.live .dot{background:#2E9E5B;box-shadow:0 0 0 3px rgba(46,158,91,.18)}
+.sync.warn .dot{background:var(--warn)}
+.sync button{border:0;background:none;color:var(--accent);font-weight:600;cursor:pointer;padding:0;text-decoration:underline}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 12px;font-size:14px;font-weight:500;cursor:pointer;text-decoration:none;color:var(--ink)}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:grid;gap:2px}
+.kpi .label{font-size:12.5px;color:var(--muted);font-weight:500}
+.kpi .val{font-family:var(--display);font-weight:700;font-size:30px;line-height:1.1;font-variant-numeric:tabular-nums}
+.kpi .val small{font-size:16px;color:var(--muted);font-weight:600}
+.kpi .sub{font-size:12.5px;color:var(--muted)}
+.kpi.alert{border-color:var(--warn);background:linear-gradient(0deg,var(--warn-soft),var(--warn-soft)) , var(--surface)}
+.kpi.alert .val{color:var(--warn)}
+.meter{height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin-top:6px}
+.meter i{display:block;height:100%;background:var(--accent);border-radius:3px}
+.main{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px;align-items:start}
+@media (max-width:1100px){.main{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;min-width:0}
+.panel-head{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line)}
+.panel-head h2{font-family:var(--display);font-size:20px;font-weight:700;margin:0}
+.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:var(--surface);padding:6px 10px;font-size:13px;cursor:pointer;color:var(--muted);font-weight:500}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--ink);font-weight:600}
+.seg button+button{border-left:1px solid var(--line)}
+.iconbtn{width:32px;height:32px;display:inline-grid;place-items:center;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer}
+.iconbtn:hover,.seg button:hover{color:var(--ink)}
+.range-label{font-weight:600;font-size:14px;min-width:150px;text-align:center;font-variant-numeric:tabular-nums}
+.search{position:relative}
+.search input{border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:6px 10px 6px 30px;width:190px;font-size:14px}
+.search svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--muted)}
+.board-scroll{overflow-x:auto;padding:0 0 8px}
+.board{--label:132px;--col:40px;min-width:max-content;font-size:13px}
+.row{display:grid;grid-template-columns:var(--label) repeat(var(--n),var(--col));grid-auto-rows:34px;position:relative}
+.row>.lbl{grid-column:1;grid-row:1 / -1;position:sticky;left:0;z-index:3;background:var(--surface);border-right:1px solid var(--line);padding:0 12px;display:flex;flex-direction:column;justify-content:center;line-height:1.2}
+.lbl b{font-weight:600;font-size:14px}
+.lbl span{font-size:11.5px;color:var(--muted)}
+.row .cell{grid-row:1 / -1;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.row .cell.we{background:var(--weekend)}
+.row .cell.td{background:var(--accent-soft)}
+.daysrow{grid-auto-rows:auto;position:sticky;top:0;z-index:4;background:var(--surface)}
+.daysrow .lbl{border-bottom:1px solid var(--line)}
+.day{grid-row:1;text-align:center;padding:8px 0 6px;border-bottom:1px solid var(--line);border-right:1px solid var(--line);line-height:1.1}
+.day .dw{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.day .dn{font-weight:600;font-variant-numeric:tabular-nums;font-size:13px}
+.day .mo{font-size:10px;color:var(--accent);font-weight:600;text-transform:uppercase;display:block;height:12px}
+.day.we{background:var(--weekend)}
+.day.td{background:var(--today);color:var(--surface)}
+.day.td .dw,.day.td .mo{color:var(--surface)}
+.occ{grid-row:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:2px;padding:6px 0 5px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.occ i{width:14px;border-radius:3px 3px 0 0;background:var(--accent);opacity:.75;display:block}
+.occ.full i{background:var(--warn);opacity:1}
+.occ em{font-style:normal;font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+.occrow{grid-auto-rows:48px}
+.grp{display:grid;grid-template-columns:var(--label) 1fr;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600;background:var(--paper);border-bottom:1px solid var(--line)}
+.grp div{position:sticky;left:0;padding:6px 12px}
+.bar{z-index:2;margin:4px 2px;border-radius:6px;background:var(--bg);border-left:4px solid var(--st);display:flex;align-items:center;gap:6px;padding:0 8px;min-width:0;cursor:pointer;border-top:0;border-right:0;border-bottom:0;text-align:left;color:var(--ink);overflow:hidden;white-space:nowrap;transition:opacity .15s, box-shadow .15s}
+.bar:hover{box-shadow:0 0 0 2px var(--st)}
+.bar .nm{font-weight:600;font-size:12.5px;overflow:hidden;text-overflow:ellipsis}
+.bar .bk{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+.bar.tbc{background:repeating-linear-gradient(135deg,var(--bg) 0 6px,var(--hatch) 6px 12px),var(--bg);outline:1.5px dashed var(--st);outline-offset:-1.5px}
+.bar.cut-l{border-left-style:dotted;border-radius:0 6px 6px 0;margin-left:0}
+.bar.cut-r{border-radius:6px 0 0 6px;margin-right:0}
+.bar.dim{opacity:.18}
+.bar.sel{box-shadow:0 0 0 2px var(--ink)}
+.bar .mv{font-size:11px;color:var(--muted)}
+.pk-balance{--bg:var(--pk-balance-bg);--st:var(--pk-balance-st)}
+.pk-surf{--bg:var(--pk-surf-bg);--st:var(--pk-surf-st)}
+.pk-yoga{--bg:var(--pk-yoga-bg);--st:var(--pk-yoga-st)}
+.pk-cyo{--bg:var(--pk-cyo-bg);--st:var(--pk-cyo-st)}
+.pk-purple{--bg:var(--pk-purple-bg);--st:var(--pk-purple-st)}
+.pk-airbnb{--bg:var(--pk-airbnb-bg);--st:var(--pk-airbnb-st)}
+.pk-retreat{--bg:var(--pk-retreat-bg);--st:var(--pk-retreat-st)}
+.pk-staff{--bg:var(--pk-staff-bg);--st:var(--pk-staff-st)}
+.pk-none{--bg:var(--pk-none-bg);--st:var(--pk-none-st)}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;padding:12px 16px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:14px;height:12px;border-radius:3px;background:var(--bg);border-left:3px solid var(--st);display:inline-block}
+.sw.tbc{background:repeating-linear-gradient(135deg,var(--pk-none-bg) 0 3px,var(--hatch) 3px 6px);outline:1px dashed var(--pk-none-st)}
+.side{display:grid;gap:20px}
+.agenda{padding:4px 0 8px}
+.aday{padding:10px 16px 6px}
+.aday h3{margin:0 0 6px;font-size:13px;font-weight:600;display:flex;justify-content:space-between;color:var(--ink)}
+.aday h3 span{color:var(--muted);font-weight:500}
+.aday.is-today h3{color:var(--accent)}
+.item{display:grid;grid-template-columns:18px 1fr auto;gap:2px 8px;align-items:start;padding:6px 8px;margin:0 -8px;border-radius:8px;cursor:pointer;border:0;background:none;width:calc(100% + 16px);text-align:left}
+.item:hover{background:var(--paper)}
+.item .ic{font-size:13px;line-height:20px;color:var(--muted);text-align:center}
+.item .ic.in{color:#2E9E5B}
+.item .ic.out{color:var(--warn)}
+.item .who{font-weight:600;font-size:13.5px;line-height:20px}
+.item .meta{grid-column:2 / -1;font-size:12px;color:var(--muted)}
+.item .rm{font-family:var(--mono);font-size:11.5px;background:var(--paper);border:1px solid var(--line);border-radius:5px;padding:0 5px;line-height:18px;margin-top:1px}
+.empty{color:var(--muted);font-size:13px;padding:2px 0 6px}
+.tag{display:inline-block;font-size:11px;border-radius:999px;padding:1px 7px;background:var(--paper);border:1px solid var(--line);color:var(--muted);margin:2px 4px 0 0}
+.tag.t{background:var(--accent-soft);border-color:transparent;color:var(--ink)}
+.notice{display:none;background:var(--warn-soft);border:1px solid var(--warn);border-radius:12px;padding:12px 16px;font-size:14px}
+.notice.show{display:block}
+.scrim{position:fixed;inset:0;background:rgba(10,20,22,.35);opacity:0;pointer-events:none;transition:opacity .2s;z-index:20}
+.scrim.open{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;height:100%;width:min(420px,100%);background:var(--surface);border-left:1px solid var(--line);z-index:21;transform:translateX(100%);transition:transform .22s ease;display:flex;flex-direction:column}
+.drawer.open{transform:none}
+.dhead{padding:20px 20px 14px;border-bottom:1px solid var(--line);border-top:6px solid var(--st);display:grid;gap:6px}
+.dhead h2{font-family:var(--display);font-size:26px;margin:0;line-height:1.1;text-wrap:balance}
+.dhead .close{position:absolute;top:16px;right:16px}
+.dbody{padding:16px 20px 24px;overflow:auto;display:grid;gap:18px}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;border-radius:999px;padding:2px 9px;background:var(--bg);color:var(--ink);border:1px solid var(--st)}
+.pill.ok{--bg:var(--pk-balance-bg);--st:var(--pk-balance-st)}
+.pill.tbc{--bg:var(--warn-soft);--st:var(--warn)}
+.pill.x{--bg:var(--pk-cyo-bg);--st:var(--pk-cyo-st)}
+.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.fact{background:var(--paper);border-radius:10px;padding:10px}
+.fact .k{font-size:11.5px;color:var(--muted)}
+.fact .v{font-weight:600;font-variant-numeric:tabular-nums}
+.dsec h4{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.svc{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
+.svc div{border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+.svc b{font-family:var(--mono);font-size:12px;color:var(--muted);font-weight:500}
+.svc span{font-size:12px;color:var(--muted)}
+.svc strong{font-family:var(--display);font-size:20px}
+.note{white-space:pre-wrap;background:var(--paper);border-radius:10px;padding:10px 12px;font-size:14px}
+.rel{display:grid;gap:6px}
+.rel button{display:flex;justify-content:space-between;gap:8px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 10px;cursor:pointer;text-align:left}
+.rel button:hover{border-color:var(--accent)}
+.foot{font-size:12.5px;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (max-width:600px){.search input{width:140px}.range-label{min-width:0}.facts{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow">General Luna · Booking map</p>
+      <h1>Room board</h1>
+    </div>
+    <div class="top-right">
+      <span class="sync" id="sync" role="status"><span class="dot"></span><span id="syncText">Loading…</span></span>
+      <a class="btn" href="https://docs.google.com/spreadsheets/d/1ULFNVIC2np-iJLZfD9l1A8FSV574t7u7Ac7SM2yCZD8/edit#gid=1246427595" target="_blank" rel="noopener">Open the sheet ↗</a>
+    </div>
+  </header>
+
+  <div class="notice" id="notice" role="alert"></div>
+
+  <section class="kpis" id="kpis" aria-label="Today at a glance"></section>
+
+  <div class="main">
+    <section class="panel" aria-labelledby="boardTitle">
+      <div class="panel-head">
+        <h2 id="boardTitle">Rooms by night</h2>
+        <div class="controls">
+          <div class="search">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input id="q" type="search" placeholder="Guest or booking #" aria-label="Find a guest or booking number">
+          </div>
+          <button class="iconbtn" id="prev" aria-label="Earlier">‹</button>
+          <button class="btn" id="todayBtn">Today</button>
+          <button class="iconbtn" id="next" aria-label="Later">›</button>
+          <span class="range-label" id="rangeLabel"></span>
+          <div class="seg" role="group" aria-label="Range">
+            <button data-days="14" aria-pressed="false">2 wk</button>
+            <button data-days="28" aria-pressed="true">4 wk</button>
+            <button data-days="56" aria-pressed="false">8 wk</button>
+          </div>
+        </div>
+      </div>
+      <div class="board-scroll" id="boardScroll"><div class="board" id="board"></div></div>
+      <div class="legend" id="legend"></div>
+    </section>
+
+    <aside class="side">
+      <section class="panel" aria-labelledby="agTitle">
+        <div class="panel-head"><h2 id="agTitle">Next 7 days</h2></div>
+        <div class="agenda" id="agenda"></div>
+      </section>
+      <section class="panel" aria-labelledby="tbcTitle">
+        <div class="panel-head"><h2 id="tbcTitle">Waiting on confirmation</h2></div>
+        <div class="agenda" id="tbc"></div>
+      </section>
+      <p class="foot" id="foot"></p>
+    </aside>
+  </div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" aria-labelledby="dName" role="dialog">
+  <div class="dhead" id="dHead">
+    <button class="iconbtn close" id="dClose" aria-label="Close details">✕</button>
+    <div id="dPills"></div>
+    <h2 id="dName"></h2>
+    <div id="dSub" class="foot"></div>
+  </div>
+  <div class="dbody" id="dBody"></div>
+</aside>
+
+<script>
+/* ---------- Google Sheet → stays ---------- */
+const SHEET_ID = "1ULFNVIC2np-iJLZfD9l1A8FSV574t7u7Ac7SM2yCZD8";
+const SHEET_TABS = ["2026 2/2", "2027 1/2"];
+const SHEET_INPUT = {
+  spreadsheetId: SHEET_ID,
+  ranges: SHEET_TABS.map(t => `'${t}'!A8:M400`),
+  includeGridData: true,
+  fields: ["sheets.properties.title", "sheets.properties.sheetId", "sheets.data.startRow",
+           "sheets.data.rowData.values.formattedValue", "sheets.data.rowData.values.userEnteredFormat.backgroundColor"]
+};
+const ROOM_IDS = ["A","B","C1","C2","D1","D2","E","V1","V2"];
+const STAFF_UNITS = ["V1","V2"];
+const SHEET_COLORS = [
+  ["Balance",[0.851,0.918,0.827]], ["Surf",[0.812,0.886,0.953]], ["Yoga",[1,0.949,0.8]],
+  ["Create Your Own",[0.957,0.8,0.8]], ["Purple (unlabeled)",[0.851,0.824,0.914]],
+  ["Airbnb",[0.902,0.722,0.686]], ["TBC",[0.953,0.953,0.953]]
+];
+const MON3 = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+
+function colorKey(bg){
+  if (!bg) return null;
+  const r = bg.red||0, g = bg.green||0, b = bg.blue||0;
+  if (r>0.985 && g>0.985 && b>0.985) return null;           // white = empty
+  let best = null, bd = 1e9;
+  for (const [k,[R,G,B]] of SHEET_COLORS){ const d=(r-R)**2+(g-G)**2+(b-B)**2; if (d<bd){bd=d;best=k;} }
+  return bd < 0.004 ? best : "Other";
+}
+const titleCase = s => s.toLowerCase().replace(/(^|[\s,&\-'’])([a-zà-ÿ])/g, (m,p,c)=>p+c.toUpperCase()).replace(/\bAnd\b/g,"and");
+const NAME_RE = /[A-ZÀ-Þ][A-ZÀ-Þ'’\-]{2,}(?:\s*(?:,|&|\band\b|\bAND\b)?\s*[A-ZÀ-Þ][A-ZÀ-Þ'’\-]{2,})*/;
+const SVC_RE = /\b(SIB|YW|VA|S|Y|M|L)\s*[-–:]\s*(\d+)/g;
+
+function readCell(raw){
+  const out = {name:"", bk:"", move:false, tr:[], time:"", svc:{}, note:""};
+  let t = String(raw||"").replace(/\s+/g," ").trim();
+  if (!t) return out;
+  const bkm = t.match(/\((\d{3,5})\)/); if (bkm){ out.bk = bkm[1]; t = t.replace(bkm[0]," "); }
+  if (/\(transfer\)/i.test(t)){ out.move = true; t = t.replace(/\(transfer\)/ig," "); }
+  for (const m of t.matchAll(SVC_RE)){ out.svc[m[1]] = (out.svc[m[1]]||0) + Number(m[2]); }
+  t = t.replace(SVC_RE," ");
+  const nm = t.match(NAME_RE);
+  if (nm){ out.name = titleCase(nm[0].trim()); t = t.replace(nm[0]," "); }
+  if (/GL\s*pick/i.test(t)) out.tr.push("GL pick up"); else if (/pick\s*-?\s*up/i.test(t)) out.tr.push("Airport pick up");
+  if (/GL\s*drop/i.test(t)) out.tr.push("GL drop off"); else if (/drop/i.test(t)) out.tr.push("Airport drop off");
+  const tm = t.match(/\b\d{1,2}[.:]\d{2}\s*(?:am|pm)?|\b\d{1,2}\s*(?:am|pm)\b/i);
+  if (tm) out.time = tm[0].replace(/\s+/g,"");
+  const left = t.replace(/GL\s*pick\s*-?\s*up|GL\s*drop(\s*off)?|pick\s*-?\s*up|drop(\s*off)?/ig," ")
+                .replace(tm ? tm[0] : /$^/, " ").replace(/^[\s\-–;:,+\d]+|[\s\-–;:,]+$/g,"").replace(/\s+/g," ").trim();
+  if (/[a-z]{3,}/i.test(left)) out.note = left;
+  return out;
+}
+
+function extractSheets(res){
+  const parse = x => { if (typeof x === "string"){ try { return JSON.parse(x); } catch { return null; } } return x; };
+  let p = parse(res && res.payload !== undefined ? res.payload : res);
+  for (let i=0; i<4 && p; i++){
+    if (Array.isArray(p.sheets)) return p.sheets;
+    if (Array.isArray(p)){ const blk = p.map(b => parse(b && b.text)).find(q => q && (q.sheets || q.content)); p = blk || null; continue; }
+    if (p.structuredContent) { p = parse(p.structuredContent); continue; }
+    if (p.content !== undefined) { p = parse(p.content); continue; }
+    break;
+  }
+  return null;
+}
+
+function colLetter(i){ let s=""; i++; while(i){ const m=(i-1)%26; s=String.fromCharCode(65+m)+s; i=Math.floor((i-1)/26); } return s; }
+
+function parseSheet(res){
+  const sheets = extractSheets(res);
+  if (!sheets) return null;
+  const grid = new Map();                       // day -> {room: cell}
+  for (const sh of sheets){
+    const title = (sh.properties && sh.properties.title) || "";
+    const gid = sh.properties && sh.properties.sheetId;
+    let year = Number((title.match(/20\d\d/)||[])[0]) || new Date().getFullYear();
+    for (const block of sh.data || []){
+      const start = block.startRow || 0;
+      let map = null, lastMonth = -1;
+      (block.rowData || []).forEach((row, i) => {
+        const v = row.values || [];
+        const txt = j => String((v[j] && v[j].formattedValue) ?? "").trim();
+        if (!map){
+          const ids = v.map((_,j) => txt(j));
+          if (ids.includes("A") && ids.includes("C1")){
+            map = [];
+            ids.forEach((id,j) => {
+              if (!ROOM_IDS.includes(id)) return;
+              // rooms A and B span two columns (second guest / extra notes)
+              const wide = (id==="A" || id==="B") && ids[j+1] === "";
+              map.push({id, cols: wide ? [j, j+1] : [j]});
+            });
+          }
+          return;
+        }
+        const dm = txt(0).match(/^([A-Za-zé]{3})[a-zé]*\.?\s+(\d{1,2})$/);
+        if (!dm) return;
+        const mi = MON3.indexOf(dm[1].toLowerCase().replace("é","e"));
+        if (mi < 0) return;
+        if (lastMonth >= 0 && mi < lastMonth) year++;
+        lastMonth = mi;
+        const day = Math.round(Date.UTC(year, mi, Number(dm[2]))/864e5);
+        for (const room of map){
+          const cells = room.cols.map(j => ({t: txt(j), c: colorKey(v[j] && v[j].userEnteredFormat && v[j].userEnteredFormat.backgroundColor)}));
+          if (!cells[0].c) continue;
+          if (!grid.has(day)) grid.set(day, {});
+          if (grid.get(day)[room.id]) continue;             // first tab wins on overlapping dates
+          grid.get(day)[room.id] = {color: cells[0].c, head: cells[0].t, texts: cells.map(c=>c.t).filter(Boolean), gid, row: start+i+1, col: room.cols[0]};
+        }
+      });
+    }
+  }
+
+  // walk each room column and cut it into stays
+  const days = [...grid.keys()].sort((a,b)=>a-b);
+  const runs = [];
+  for (const room of ROOM_IDS){
+    let cur = null;
+    const close = () => { if (cur){ runs.push(cur); cur = null; } };
+    for (const d of days){
+      const cell = grid.get(d)[room];
+      if (!cell){ close(); continue; }
+      if (cur && d !== cur.end+1) close();
+      const info = cell.texts.map(readCell);
+      const head = readCell(cell.head);
+      const isPick = info.some(x => x.tr.some(t => /pick/i.test(t)));
+      if (cur && (cell.color !== cur.color || (head.name && cur.name) || (isPick && !head.name && d - cur.start >= 2))) close();
+      if (!cur) cur = {room, rooms:[room], color: cell.color, start: d, end: d, name:"", bk:"", move:false, tr:new Set(), time:"", svc:{}, notes:[], gid: cell.gid, row: cell.row, col: cell.col};
+      cur.end = d;
+      if (head.name && !cur.name){ cur.name = head.name; if (cur.start !== d){ cur.start = d; cur.row = cell.row; } }
+      for (const x of info){
+        if (x.bk && !cur.bk) cur.bk = x.bk;
+        if (x.move) cur.move = true;
+        x.tr.forEach(t => cur.tr.add(t));
+        if (x.time && !cur.time) cur.time = x.time;
+        for (const k in x.svc) cur.svc[k] = (cur.svc[k]||0) + x.svc[k];
+        if (x.note) cur.notes.push(x.note);
+      }
+    }
+    close();
+  }
+
+  // a nameless stay that starts with a named one in another bed/room is the same booking
+  const named = runs.filter(r => r.name);
+  for (const r of runs.filter(r => !r.name)){
+    const ok = h => h.start === r.start && h.color === r.color && !h.rooms.includes(r.room) && STAFF_UNITS.includes(h.room) === STAFF_UNITS.includes(r.room);
+    const sib = {C1:"C2", C2:"C1", D1:"D2", D2:"D1"}[r.room];
+    const host = named.find(h => ok(h) && h.room === sib) || named.find(ok);
+    if (host){
+      host.rooms.push(r.room); host.end = Math.max(host.end, r.end);
+      r.tr.forEach(t => host.tr.add(t)); if (!host.time) host.time = r.time;
+      for (const k in r.svc) host.svc[k] = (host.svc[k]||0) + r.svc[k];
+      host.notes.push(...r.notes); r.merged = true; continue;
+    }
+    const prev = runs.find(p => p !== r && p.room === r.room && p.end === r.start-1 && p.name);
+    if (prev){ r.name = prev.name; r.bk = prev.bk; r.ext = prev; r.notes.unshift(r.color === "TBC" ? "Extra nights, not yet confirmed" : "Extra nights"); }
+  }
+
+  const out = [];
+  for (const r of runs){
+    if (r.merged) continue;
+    const staff = r.rooms.every(u => STAFF_UNITS.includes(u));
+    let pkg = staff ? "Staff / Personal" : (r.color === "TBC" || r.color === "Other") ? "" : r.color;
+    if (!pkg && r.ext && r.ext.color !== "TBC") pkg = r.ext.color;
+    const status = (r.color === "TBC" && !staff) ? "Not yet confirmed" : "Confirmed";
+    const guest = r.name || (staff ? "Staff" : "Unnamed booking");
+    const pax = Math.max(1, guest.split(/\s*(?:,|&|\band\b)\s*/i).filter(Boolean).length);
+    out.push({
+      id: `${r.gid}:${r.row}:${r.col}`,
+      url: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit#gid=${r.gid}&range=${colLetter(r.col)}${r.row}`,
+      guest, bk: r.bk, rooms: r.rooms, pkg, status, pax, move: r.move,
+      transfers: [...r.tr], time: r.time, notes: [...new Set(r.notes)].join("\n"), extras: "",
+      start: r.start, end: r.end, checkout: r.end + 1, svc: r.svc
+    });
+  }
+  // room moves: carry the booking # across to the next room
+  for (const r of out){
+    if (r.bk) continue;
+    const p = out.find(x => x !== r && x.checkout === r.start && x.guest.toLowerCase() === r.guest.toLowerCase() && x.bk);
+    if (p){ r.bk = p.bk; if (!r.pkg) r.pkg = p.pkg; }
+  }
+  return linkSegments(out);
+}
+
+function linkSegments(out){
+  out.sort((a,b)=>a.start-b.start || a.guest.localeCompare(b.guest));
+  const same = (a,b) => a.guest.toLowerCase()===b.guest.toLowerCase() && a.bk===b.bk;
+  for (const a of out){
+    a.prevSeg = out.find(b => b!==a && same(a,b) && b.checkout===a.start) || null;
+    a.nextSeg = out.find(b => b!==a && same(a,b) && a.checkout===b.start) || null;
+  }
+  return out;
+}
+if (typeof module !== "undefined") module.exports = {parseSheet, readCell, colorKey};
+
+
+const ROOMS = [
+  {g:"Private rooms", id:"A", sub:"Private room"},
+  {g:"Private rooms", id:"B", sub:"Private room"},
+  {g:"Shared rooms", id:"C1", sub:"Room C · bed 1"},
+  {g:"Shared rooms", id:"C2", sub:"Room C · bed 2"},
+  {g:"Shared rooms", id:"D1", sub:"Room D · bed 1"},
+  {g:"Shared rooms", id:"D2", sub:"Room D · bed 2"},
+  {g:"Bamboo House", id:"E", sub:"Bamboo House"},
+  {g:"Staff rooms", id:"V1", sub:"Staff room"},
+  {g:"Staff rooms", id:"V2", sub:"Staff room"},
+];
+const GUEST_UNITS = ["A","B","C1","C2","D1","D2","E"];
+const PK = {
+  "Balance":{c:"pk-balance",s:"Balance"}, "Surf":{c:"pk-surf",s:"Surf"}, "Yoga":{c:"pk-yoga",s:"Yoga"},
+  "Create Your Own":{c:"pk-cyo",s:"Create your own"}, "Purple (unlabeled)":{c:"pk-purple",s:"Purple (unlabeled)"},
+  "Airbnb":{c:"pk-airbnb",s:"Airbnb"}, "Staff / Personal":{c:"pk-staff",s:"Staff / personal"}
+};
+const SVC = [["S","Surf class"],["VA","Video analysis"],["Y","Yoga"],["YW","Yoga workshop"],["SIB","Sauna & ice bath"],["M","Massage"],["L","Laundry"]];
+const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const WD = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+const dt = n => new Date(n*864e5);
+const fmt = (n, o={}) => { const d = dt(n); return (o.wd ? WD[d.getUTCDay()]+" " : "") + d.getUTCDate()+" "+MON[d.getUTCMonth()] + (o.y ? " "+d.getUTCFullYear() : ""); };
+const nowLocal = new Date();
+const TODAY = Math.round(Date.UTC(nowLocal.getFullYear(), nowLocal.getMonth(), nowLocal.getDate())/864e5);
+
+/* ---------- state ---------- */
+let DATA = [];
+let span = 28;
+let winStart = TODAY - 3;
+let query = "";
+let selected = null;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pkc = p => (PK[p]||{c:"pk-none"}).c;
+const active = r => r.status !== "Cancelled";
+const isGuest = r => r.pkg !== "Staff / Personal";
+const isMove = r => !!r.prevSeg && r.prevSeg.rooms.join() !== r.rooms.join();
+const onNight = (r, d) => active(r) && r.start <= d && d <= r.end;
+
+/* ---------- KPIs ---------- */
+function unitsTaken(d){ const s = new Set(); for (const r of DATA) if (onNight(r,d)) for (const u of r.rooms) if (GUEST_UNITS.includes(u)) s.add(u); return s.size; }
+function renderKpis(){
+  const t = TODAY;
+  const inHouse = DATA.filter(r => onNight(r,t) && isGuest(r));
+  const guests = inHouse.reduce((n,r)=>n+(r.pax||1),0);
+  const taken = unitsTaken(t);
+  const arrive = DATA.filter(r => active(r) && isGuest(r) && r.start===t && !r.prevSeg);
+  const arriveTm = DATA.filter(r => active(r) && isGuest(r) && r.start===t+1 && !r.prevSeg);
+  const depart = DATA.filter(r => active(r) && isGuest(r) && r.checkout===t && !r.nextSeg);
+  const pickups = arrive.filter(r => r.transfers.some(x=>/pick/i.test(x)));
+  let nights=0; for (let d=t; d<t+30; d++) nights += unitsTaken(d);
+  const occ30 = Math.round(nights/(30*GUEST_UNITS.length)*100);
+  const tbc = DATA.filter(r => r.status==="Not yet confirmed" && r.end>=t);
+  $("kpis").innerHTML = `
+    <div class="kpi"><span class="label">Guests in house tonight</span><span class="val">${guests}</span><span class="sub">${inHouse.length} booking${inHouse.length===1?"":"s"}</span></div>
+    <div class="kpi"><span class="label">Rooms & beds taken</span><span class="val">${taken}<small> / ${GUEST_UNITS.length}</small></span><div class="meter"><i style="width:${taken/GUEST_UNITS.length*100}%"></i></div></div>
+    <div class="kpi"><span class="label">Arriving today</span><span class="val">${arrive.length}</span><span class="sub">${pickups.length ? pickups.length+" pick-up"+(pickups.length>1?"s":"")+" · " : ""}${arriveTm.length} tomorrow</span></div>
+    <div class="kpi"><span class="label">Leaving today</span><span class="val">${depart.length}</span><span class="sub">${depart.map(r=>esc(r.guest)).join(", ") || "No check-outs"}</span></div>
+    <div class="kpi"><span class="label">Occupancy, next 30 nights</span><span class="val">${occ30}<small>%</small></span><div class="meter"><i style="width:${occ30}%"></i></div></div>
+    <div class="kpi ${tbc.length?"alert":""}"><span class="label">Not yet confirmed</span><span class="val">${tbc.length}</span><span class="sub">${tbc.length ? "Next: "+esc(tbc[0].guest)+", "+fmt(tbc[0].start) : "All confirmed"}</span></div>`;
+}
+
+/* ---------- board ---------- */
+function lanes(items){
+  const lanesEnd = [];
+  for (const it of items){
+    let l = lanesEnd.findIndex(e => e < it.s);
+    if (l === -1){ l = lanesEnd.length; lanesEnd.push(it.e); } else lanesEnd[l] = it.e;
+    it.lane = l;
+  }
+  return Math.max(1, lanesEnd.length);
+}
+function renderBoard(){
+  const board = $("board");
+  const scroller = $("boardScroll");
+  const avail = scroller.clientWidth - 132;
+  const col = Math.max(span>28 ? 26 : 36, Math.floor(avail/span));
+  board.style.setProperty("--col", col+"px");
+  board.style.setProperty("--n", span);
+  const days = Array.from({length:span},(_,i)=>winStart+i);
+  const we = d => { const w = dt(d).getUTCDay(); return w===0||w===6; };
+  const cellCls = d => (d===TODAY?"td":we(d)?"we":"");
+  const tight = col < 34;
+  let h = "";
+  h += `<div class="row daysrow"><div class="lbl"><b>${fmt(winStart)}</b><span>to ${fmt(winStart+span-1,{y:true})}</span></div>`;
+  days.forEach((d,i)=>{
+    const D = dt(d), first = i===0 || D.getUTCDate()===1;
+    h += `<div class="day ${cellCls(d)}" style="grid-column:${i+2}"><span class="mo">${first?MON[D.getUTCMonth()]:""}</span><div class="dw">${tight?WD[D.getUTCDay()][0]:WD[D.getUTCDay()]}</div><div class="dn">${D.getUTCDate()}</div></div>`;
+  });
+  h += `</div>`;
+  h += `<div class="row occrow"><div class="lbl"><b>Taken</b><span>of ${GUEST_UNITS.length} rooms & beds</span></div>`;
+  days.forEach((d,i)=>{
+    const n = unitsTaken(d), full = n>=GUEST_UNITS.length;
+    h += `<div class="occ ${full?"full":""} ${cellCls(d)}" style="grid-column:${i+2}" title="${fmt(d,{wd:true})}: ${n} of ${GUEST_UNITS.length} taken"><i style="height:${Math.max(2,n/GUEST_UNITS.length*24)}px"></i><em>${n}</em></div>`;
+  });
+  h += `</div>`;
+  let lastG = "";
+  const q = query.toLowerCase();
+  for (const room of ROOMS){
+    if (room.g !== lastG){ h += `<div class="grp"><div>${room.g}</div></div>`; lastG = room.g; }
+    const items = DATA.filter(r => active(r) && r.rooms.includes(room.id) && r.end >= winStart && r.start <= winStart+span-1)
+      .map(r => ({r, s:Math.max(r.start,winStart), e:Math.min(r.end,winStart+span-1)}));
+    const nl = lanes(items);
+    h += `<div class="row room" style="grid-template-rows:repeat(${nl},34px)"><div class="lbl"><b>${room.id}</b><span>${room.sub}</span></div>`;
+    days.forEach((d,i)=>{ h += `<div class="cell ${cellCls(d)}" style="grid-column:${i+2}"></div>`; });
+    for (const it of items){
+      const r = it.r;
+      const match = !q || r.guest.toLowerCase().includes(q) || r.bk.includes(q);
+      const cls = ["bar", pkc(r.pkg), r.status==="Not yet confirmed"?"tbc":"", r.start<winStart?"cut-l":"", r.end>winStart+span-1?"cut-r":"", match?"":"dim", selected===r.id?"sel":""].join(" ");
+      const tip = `${r.guest}${r.bk?" ("+r.bk+")":""} · ${r.pkg||"No package"} · ${r.status} · ${fmt(r.start)} to ${fmt(r.checkout)}`;
+      const width = it.e - it.s + 1;
+      h += `<button class="${cls}" data-id="${esc(r.id)}" style="grid-column:${it.s-winStart+2} / ${it.e-winStart+3};grid-row:${it.lane+1}" title="${esc(tip)}" aria-label="${esc(tip)}">`
+        + ((isMove(r) || r.move) && r.start>=winStart ? `<span class="mv" aria-hidden="true">↪</span>` : "")
+        + `<span class="nm">${esc(r.guest)}</span>`
+        + (r.bk && width*col > 120 ? `<span class="bk">${esc(r.bk)}</span>` : "")
+        + `</button>`;
+    }
+    h += `</div>`;
+  }
+  board.innerHTML = h;
+  $("rangeLabel").textContent = `${fmt(winStart)} – ${fmt(winStart+span-1,{y:true})}`;
+  document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", String(Number(b.dataset.days)===span)));
+}
+
+function renderLegend(){
+  const inWin = DATA.filter(r => active(r) && r.end>=winStart && r.start<=winStart+span-1);
+  const counts = {}; for (const r of inWin) counts[r.pkg] = (counts[r.pkg]||0)+1;
+  let h = Object.entries(PK).map(([k,v]) => `<span><i class="sw ${v.c}"></i>${v.s}${counts[k]?` <b>${counts[k]}</b>`:""}</span>`).join("");
+  h += `<span><i class="sw tbc"></i>Not yet confirmed (grey in the sheet)</span><span>↪ room move</span>`;
+  $("legend").innerHTML = h;
+}
+
+/* ---------- agenda ---------- */
+function itemHtml(r, kind){
+  const ic = kind==="in" ? `<span class="ic in" aria-label="Arrives">↓</span>` : kind==="out" ? `<span class="ic out" aria-label="Leaves">↑</span>` : `<span class="ic" aria-label="Room move">↪</span>`;
+  const rooms = kind==="move" ? `${(r.prevSeg?.rooms||[]).join("/")} → ${r.rooms.join("/")}` : r.rooms.join("/");
+  let meta = "";
+  if (kind==="in"){
+    const tr = r.transfers.filter(t=>/pick/i.test(t));
+    meta = [r.pkg && (PK[r.pkg]?.s||r.pkg), tr.length ? tr.join(", ")+(r.time?" · "+r.time:"") : (r.time?"Pick up "+r.time:""), r.status==="Not yet confirmed"?"not confirmed":""].filter(Boolean).join(" · ");
+  } else if (kind==="out"){
+    const tr = r.transfers.filter(t=>/drop/i.test(t));
+    meta = [tr.join(", "), r.extras].filter(Boolean).join(" · ") || "Check-out";
+  } else meta = "Room move";
+  return `<button class="item" data-id="${esc(r.id)}">${ic}<span class="who">${esc(r.guest)}${r.pax>1?` <span class="tag">${r.pax} pax</span>`:""}</span><span class="rm">${esc(rooms)}</span><span class="meta">${esc(meta)}</span></button>`;
+}
+function renderAgenda(){
+  let h = "";
+  const g = r => active(r) && isGuest(r);
+  for (let d=TODAY; d<TODAY+7; d++){
+    const ins = DATA.filter(r=>g(r) && r.start===d && !r.prevSeg);
+    const moves = DATA.filter(r=>g(r) && r.start===d && isMove(r));
+    const outs = DATA.filter(r=>g(r) && r.checkout===d && !r.nextSeg);
+    const label = d===TODAY ? "Today" : d===TODAY+1 ? "Tomorrow" : fmt(d,{wd:true});
+    h += `<div class="aday ${d===TODAY?"is-today":""}"><h3>${label}<span>${d<=TODAY+1?fmt(d,{wd:true}):""}</span></h3>`;
+    if (!ins.length && !outs.length && !moves.length) h += `<div class="empty">No arrivals or check-outs</div>`;
+    h += ins.map(r=>itemHtml(r,"in")).join("") + moves.map(r=>itemHtml(r,"move")).join("") + outs.map(r=>itemHtml(r,"out")).join("");
+    h += `</div>`;
+  }
+  $("agenda").innerHTML = h;
+  const tbc = DATA.filter(r=>r.status==="Not yet confirmed" && r.end>=TODAY);
+  $("tbc").innerHTML = `<div class="aday">` + (tbc.length ? tbc.map(r=>`<button class="item" data-id="${esc(r.id)}"><span class="ic">◌</span><span class="who">${esc(r.guest)}</span><span class="rm">${esc(r.rooms.length>3?r.rooms.length+" rooms":r.rooms.join("/"))}</span><span class="meta">${fmt(r.start)} – ${fmt(r.checkout)} · ${r.end-r.start+1} night${r.end>r.start?"s":""}${r.bk?" · #"+esc(r.bk):""}</span></button>`).join("") : `<div class="empty">${DATA.length ? "Everything upcoming is confirmed." : "No bookings loaded yet."}</div>`) + `</div>`;
+}
+
+/* ---------- drawer ---------- */
+function openDrawer(id){
+  const r = DATA.find(x=>x.id===id); if (!r) return;
+  selected = id;
+  const d = $("drawer");
+  d.className = "drawer open " + pkc(r.pkg);
+  d.setAttribute("aria-hidden","false");
+  $("scrim").classList.add("open");
+  const stCls = r.status==="Confirmed"?"ok":r.status==="Cancelled"?"x":"tbc";
+  $("dPills").innerHTML = `<span class="pill ${pkc(r.pkg)}">${esc(PK[r.pkg]?.s || r.pkg || "No package colour")}</span> <span class="pill ${stCls}">${esc(r.status||"No status")}</span>`;
+  $("dName").textContent = r.guest;
+  $("dSub").textContent = [r.bk ? "Booking #"+r.bk : "No booking #", r.rooms.length ? "Room "+r.rooms.join(", ") : ""].filter(Boolean).join(" · ");
+  const nights = r.end - r.start + 1;
+  const svc = SVC.filter(([k])=>r.svc[k]).map(([k,lbl])=>`<div><span><b>${k}</b> ${lbl}</span><strong>${r.svc[k]}</strong></div>`).join("");
+  const rel = DATA.filter(x => x!==r && r.bk && x.bk===r.bk);
+  let b = `<div class="facts">
+      <div class="fact"><div class="k">Check-in</div><div class="v">${fmt(r.start,{wd:true})}</div></div>
+      <div class="fact"><div class="k">Check-out</div><div class="v">${fmt(r.checkout,{wd:true})}</div></div>
+      <div class="fact"><div class="k">Nights · pax</div><div class="v">${nights} · ${r.pax||"–"}</div></div>
+    </div>`;
+  b += `<div class="dsec"><h4>Transfers</h4>${r.transfers.length ? r.transfers.map(t=>`<span class="tag t">${esc(t)}</span>`).join("") : `<span class="empty">None noted</span>`}${r.time?`<div class="foot" style="margin-top:6px">Pick up time: <b>${esc(r.time)}</b></div>`:""}</div>`;
+  b += `<div class="dsec"><h4>Add-ons</h4>${svc ? `<div class="svc">${svc}</div>` : `<span class="empty">${r.prevSeg ? "Logged on the first room of this stay" : "None noted"}</span>`}</div>`;
+  if (r.notes) b += `<div class="dsec"><h4>Notes from the sheet</h4><div class="note">${esc(r.notes)}</div></div>`;
+  if (rel.length) b += `<div class="dsec"><h4>Same booking</h4><div class="rel">${rel.map(x=>`<button data-id="${esc(x.id)}"><span><b>${esc(x.guest)}</b> · ${esc(x.rooms.join("/"))}</span><span class="foot">${fmt(x.start)} – ${fmt(x.checkout)}</span></button>`).join("")}</div></div>`;
+  if (r.url) b += `<a class="btn primary" href="${esc(r.url)}" target="_blank" rel="noopener">Open this cell in the sheet ↗</a>`;
+  $("dBody").innerHTML = b;
+  document.querySelectorAll(".bar.sel").forEach(e=>e.classList.remove("sel"));
+  document.querySelectorAll(`.bar[data-id="${CSS.escape(id)}"]`).forEach(e=>e.classList.add("sel"));
+  $("dClose").focus();
+}
+function closeDrawer(){
+  selected = null;
+  $("drawer").classList.remove("open"); $("drawer").setAttribute("aria-hidden","true");
+  $("scrim").classList.remove("open");
+  document.querySelectorAll(".bar.sel").forEach(e=>e.classList.remove("sel"));
+}
+
+function renderAll(){ renderKpis(); renderBoard(); renderLegend(); renderAgenda();
+  $("foot").textContent = DATA.length ? `${DATA.length} stays read from the booking map. Edit bookings in the sheet; this board follows it.` : ""; }
+
+/* ---------- events ---------- */
+document.addEventListener("click", e => {
+  const t = e.target.closest("[data-id]");
+  if (t && !t.closest("#drawer .dhead")) { openDrawer(t.dataset.id); return; }
+});
+$("scrim").addEventListener("click", closeDrawer);
+$("dClose").addEventListener("click", closeDrawer);
+document.addEventListener("keydown", e => { if (e.key==="Escape") closeDrawer(); });
+$("prev").addEventListener("click", ()=>{ winStart -= Math.max(7, Math.floor(span/2)); renderBoard(); renderLegend(); });
+$("next").addEventListener("click", ()=>{ winStart += Math.max(7, Math.floor(span/2)); renderBoard(); renderLegend(); });
+$("todayBtn").addEventListener("click", ()=>{ winStart = TODAY-3; renderBoard(); renderLegend(); });
+document.querySelectorAll(".seg button").forEach(b=>b.addEventListener("click",()=>{ span = Number(b.dataset.days); try{localStorage.setItem("rb-span",span)}catch{} renderBoard(); renderLegend(); }));
+$("q").addEventListener("input", e=>{
+  query = e.target.value.trim(); renderBoard();
+  if (query){ const q=query.toLowerCase(); const hit = DATA.find(r=>active(r) && r.end>=TODAY && (r.guest.toLowerCase().includes(q)||r.bk.includes(q)));
+    if (hit && (hit.start < winStart || hit.start > winStart+span-1)){ winStart = hit.start-3; renderBoard(); renderLegend(); } }
+});
+let rz; window.addEventListener("resize", ()=>{ clearTimeout(rz); rz = setTimeout(renderBoard, 120); });
+try { const s = Number(localStorage.getItem("rb-span")); if ([14,28,56].includes(s)) span = s; } catch {}
+
+/* ---------- sync status ---------- */
+function setSync(kind, text, action){
+  const el = $("sync"); el.className = "sync " + kind;
+  $("syncText").innerHTML = esc(text) + (action ? ` <button id="syncAct">${esc(action.label)}</button>` : "");
+  if (action) $("syncAct").addEventListener("click", action.fn);
+}
+function notice(msg){ const n = $("notice"); n.textContent = msg || ""; n.classList.toggle("show", !!msg); }
+const hhmm = ms => new Date(ms).toLocaleString([], {day:"numeric", month:"short", hour:"2-digit", minute:"2-digit"});
+
+renderAll();
+setSync("", "Connecting to the sheet…");
+
+/* ---------- live data ----------
+   Two ways in:
+   1. SCRIPT_URL set  -> fetch JSON from the Google Apps Script web app (works on GitHub Pages / any host)
+   2. otherwise       -> the viewer's Google Sheets connector, when opened as a claude.ai artifact      */
+const SCRIPT_URL = "";   // paste your Apps Script /exec URL here (see README)
+const SERVER = "Google Sheets", TOOL = "get_spreadsheet", POLL_MS = 60000;
+let lastGood = null, refresh = () => {};
+function apply(res, storedAt){
+  let rows = null;
+  try { rows = parseSheet(res); } catch (e) { console.error(e); }
+  if (!rows){ setSync("warn", "The sheet sent an answer the board can't read" + (lastGood ? " · last sync " + hhmm(lastGood) : ""), {label:"Try again", fn: () => refresh()}); return; }
+  DATA = rows; lastGood = storedAt || Date.now();
+  notice(""); renderAll();
+  if (selected) openDrawer(selected);
+  setSync("live", `Live from Google Sheets · ${hhmm(lastGood)}`, {label:"Refresh", fn: () => refresh()});
+}
+function fail(msg, action){ setSync("warn", msg + (lastGood ? " · last sync " + hhmm(lastGood) : ""), action); if (!lastGood) notice(msg + "."); }
+
+if (SCRIPT_URL){
+  let busy = false;
+  refresh = async () => {
+    if (busy) return; busy = true;
+    if (!lastGood) setSync("live", "Loading the sheet…");
+    try {
+      const r = await fetch(SCRIPT_URL + (SCRIPT_URL.includes("?") ? "&" : "?") + "t=" + Date.now(), {cache: "no-store"});
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const json = await r.json();
+      if (json.error) throw new Error(json.error);
+      apply(json, json.generatedAt ? Date.parse(json.generatedAt) : Date.now());
+    } catch (e) {
+      console.error(e);
+      fail("Couldn't load the booking map just now", {label:"Try again", fn: () => refresh()});
+    } finally { busy = false; }
+  };
+  refresh();
+  setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+} else (async () => {
+  let mcp = null;
+  try { mcp = window.claude && await window.claude.use("mcp"); } catch { mcp = null; }
+  if (!mcp){ setSync("warn", "No data source set"); notice("No live source is set up. Add the Apps Script URL to SCRIPT_URL in index.html (see the README), or open this board as a claude.ai artifact with Google Sheets connected."); return; }
+  refresh = async () => {
+    setSync("live", "Refreshing…");
+    try { const res = await mcp.callTool(SERVER, TOOL, SHEET_INPUT, {cache:{refresh:true}}); apply(res, res && res.cache && res.cache.storedAt); }
+    catch(err){ onError(err); }
+  };
+  function onError(err){
+    const code = err && err.code;
+    switch (code){
+      case "needs_reauth": DATA = []; renderAll(); fail("Reconnect Google Sheets in claude.ai Settings → Connectors"); break;
+      case "server_not_connected": case "server_not_found": fail("Connect Google Sheets in claude.ai Settings → Connectors to see live bookings"); break;
+      case "selection_required": fail("Choose which Google Sheets connector to use when claude.ai asks"); break;
+      case "approval_required": fail("Live bookings need your OK", {label:"Allow Google Sheets", fn: () => refresh()}); break;
+      case "not_in_manifest": case "blocked_by_policy": case "not_granted": case "capability_disabled": case "capability_removed": DATA = []; renderAll(); fail("Live sync is off for this view"); break;
+      case "tool_error": fail("Google Sheets couldn't open the booking map (check you have access to it)", {label:"Try again", fn: () => refresh()}); break;
+      default: fail("Couldn't reach Google Sheets just now", {label:"Try again", fn: () => refresh()});
+    }
+  }
+  mcp.watchTool(SERVER, TOOL, SHEET_INPUT, ev => {
+    if (ev.type === "data") apply(ev.result, ev.result && ev.result.cache && ev.result.cache.storedAt); else onError(ev.error);
+  }, {cache:{staleTime: 30000, gcTime: 86400000}, refetchInterval: POLL_MS});
+})();
+</script>
+</body>
+</html>
