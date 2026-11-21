@@ -184,6 +184,14 @@ h1{font-family:var(--display);font-weight:700;font-size:clamp(28px,3.4vw,40px);l
 .xtot b{color:var(--warn);font-family:var(--mono)}
 .tag.x{background:var(--warn-soft);border-color:transparent;color:var(--ink)}
 .xfilter{padding:10px 16px 0}
+.bill{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+.bill td{padding:5px 0;border-bottom:1px solid var(--line);vertical-align:top}
+.bill td.n{text-align:right;white-space:nowrap;padding-left:10px}
+.bill td.q{color:var(--muted);white-space:nowrap;padding-left:10px;text-align:right}
+.bill tr.sub td{color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;padding-top:10px;border-bottom:0}
+.bill tr.tot td{font-weight:700;font-size:15px;border-bottom:0;padding-top:8px}
+.money{font-family:var(--mono);font-weight:600;color:var(--ink)}
+.xopt{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);padding:8px 16px 0}
 .item .meta .tag{margin-top:4px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 @media (max-width:600px){.search input{width:140px}.range-label{min-width:0}.facts{grid-template-columns:repeat(2,1fr)}}
@@ -249,6 +257,7 @@ h1{font-family:var(--display);font-weight:700;font-size:clamp(28px,3.4vw,40px);l
           <button data-xk="nights" aria-pressed="false">Nights</button>
           <button data-xk="transfers" aria-pressed="false">Pick-ups</button>
         </div></div>
+        <label class="xopt"><input type="checkbox" id="xTr" checked> Charge pick-ups &amp; drop-offs on the tab</label>
         <div id="xtot"></div>
         <div class="agenda" id="extras"></div>
       </section>
@@ -673,6 +682,41 @@ function renderAgenda(){
   $("tbc").innerHTML = `<div class="aday">` + (tbc.length ? tbc.map(r=>`<button class="item" data-id="${esc(r.id)}"><span class="ic">◌</span><span class="who">${esc(r.guest)}</span><span class="rm">${esc(r.rooms.length>3?r.rooms.length+" rooms":r.rooms.join("/"))}</span><span class="meta">${fmt(r.start)} – ${fmt(r.checkout)} · ${r.end-r.start+1} night${r.end>r.start?"s":""}${r.bk?" · #"+esc(r.bk):""}</span></button>`).join("") : `<div class="empty">${DATA.length ? "Everything upcoming is confirmed." : "No bookings loaded yet."}</div>`) + `</div>`;
 }
 
+/* ---------- prices: PRICE LIST tab (as of Nov 2025), 30% off column ---------- */
+const DISCOUNT = 0.30;
+const PRICE = {            // list price in EUR, before the 30% discount
+  S: 40, VA: 30, Y: 17, YW: 45, SIB: 23, M: 18, L: 5,
+  "Airport pick up": 25, "Airport drop off": 25, "GL pick up": 35, "GL drop off": 35,
+  night: { privateSingle: 118, privateDouble: 94, shared: 87, bambooSingle: 150, bambooDouble: 112.5 }   // per person per night
+};
+const off = p => Math.round(p * (1 - DISCOUNT) * 100) / 100;
+const eur = n => "€" + n.toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+let chargeTransfers = true;
+try { chargeTransfers = localStorage.getItem("rb-xtr") !== "0"; } catch {}
+function nightRate(r){
+  const room = r.rooms[0] || "", pax = r.pax || 1;
+  if (room === "A" || room === "B") return pax > 1 ? {k:"Private double room", p: PRICE.night.privateDouble, per: pax} : {k:"Private single room", p: PRICE.night.privateSingle, per: 1};
+  if (room === "E") return pax > 1 ? {k:"Bamboo House double", p: PRICE.night.bambooDouble, per: pax} : {k:"Bamboo House single", p: PRICE.night.bambooSingle, per: 1};
+  return {k:"Twin shared room (bed)", p: PRICE.night.shared, per: Math.max(r.rooms.length, 1)};
+}
+// the guest's tab: only what was added on top of the package
+function guestTab(r){
+  const lines = [];
+  for (const [k,lbl] of SVC) if ((r.extra||{})[k] && PRICE[k]) lines.push({grp:"Extra sessions", lbl, qty: r.extra[k], unit: off(PRICE[k])});
+  if (r.extraNights){ const n = nightRate(r); lines.push({grp:"Extra nights", lbl: n.k + (n.per > 1 ? ` × ${n.per} people` : ""), qty: r.extraNights * n.per, unit: off(n.p), note: r.status==="Not yet confirmed" ? "not confirmed" : ""}); }
+  if (chargeTransfers) for (const x of trList(r)) lines.push({grp:"Pick-ups & drop-offs", lbl: x.t + (x.time ? " · " + x.time : ""), qty: 1, unit: off(PRICE[x.t] || 0)});
+  lines.forEach(l => l.total = Math.round(l.qty * l.unit * 100) / 100);
+  return {lines, total: Math.round(lines.reduce((a,l)=>a+l.total,0) * 100) / 100};
+}
+function tabTable(t){
+  let h = `<table class="bill">`, g = "";
+  for (const l of t.lines){
+    if (l.grp !== g){ h += `<tr class="sub"><td colspan="3">${l.grp}</td></tr>`; g = l.grp; }
+    h += `<tr><td>${esc(l.lbl)}${l.note?` <span class="tag">${l.note}</span>`:""}</td><td class="q">${l.qty} × ${eur(l.unit)}</td><td class="n">${eur(l.total)}</td></tr>`;
+  }
+  return h + `<tr class="tot"><td>Total</td><td></td><td class="n">${eur(t.total)}</td></tr></table>`;
+}
+
 /* ---------- additionals ---------- */
 // sessions written as "S - 1+1", extra nights ("add 1 night"), and transfers with their times
 const xCount = r => Object.values(r.extra||{}).reduce((a,n)=>a+n,0);
@@ -698,6 +742,8 @@ function renderExtras(){
     ...(nights ? [`<span>Extra nights <b>+${nights}</b></span>`] : []),
     ...TR_ORDER.filter(t=>trTot[t]).map(t=>`<span>${t} <b>×${trTot[t]}</b></span>`)
   ];
+  const grand = list.reduce((a,r)=>a+guestTab(r).total,0);
+  if (grand) chips.unshift(`<span>Tabs total <b>${eur(grand)}</b></span>`);
   $("xtot").innerHTML = chips.length ? `<div class="xtot">${chips.join("")}</div>` : "";
   const what = {all:"additionals", sessions:"extra sessions", nights:"extra nights", transfers:"pick-ups or drop-offs"}[xKind];
   const empty = {now:`No ${what} for guests in house tonight.`, "30":`No ${what} in the next 30 days.`, all:`No ${what} found in the sheet.`}[xScope];
@@ -706,12 +752,15 @@ function renderExtras(){
     if (show("sessions")) SVC.filter(([k])=>r.extra[k]).forEach(([k,lbl]) => parts.push(`<span class="tag x">${lbl} +${r.extra[k]}</span>`));
     if (show("nights") && r.extraNights) parts.push(`<span class="tag x">+${r.extraNights} night${r.extraNights>1?"s":""}${r.status==="Not yet confirmed"?" (not confirmed)":""}</span>`);
     if (show("transfers")) trList(r).forEach(x => parts.push(`<span class="tag t">${esc(x.t)} · ${fmt(x.day)}${x.time?" · "+esc(x.time):""}</span>`));
-    return `<button class="item" data-id="${esc(r.id)}"><span class="ic" style="color:var(--warn)">+</span><span class="who">${esc(r.guest)}</span><span class="rm">${esc(r.rooms.join("/"))}</span><span class="meta">${fmt(r.start)} – ${fmt(r.checkout)}<br>${parts.join("")}</span></button>`;
+    const tab = guestTab(r);
+    return `<button class="item" data-id="${esc(r.id)}"><span class="ic" style="color:var(--warn)">+</span><span class="who">${esc(r.guest)}${tab.total?` <span class="money">${eur(tab.total)}</span>`:""}</span><span class="rm">${esc(r.rooms.join("/"))}</span><span class="meta">${fmt(r.start)} – ${fmt(r.checkout)}<br>${parts.join("")}</span></button>`;
   }).join("") : `<div class="empty">${empty}</div>`) + `</div>`;
   document.querySelectorAll(".seg button[data-x]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.x===xScope)));
   document.querySelectorAll(".seg button[data-xk]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.xk===xKind)));
 }
 document.querySelectorAll(".seg button[data-x]").forEach(b => b.addEventListener("click", () => { xScope = b.dataset.x; try { localStorage.setItem("rb-xscope", xScope); } catch {} renderExtras(); }));
+$("xTr").checked = chargeTransfers;
+$("xTr").addEventListener("change", e => { chargeTransfers = e.target.checked; try { localStorage.setItem("rb-xtr", chargeTransfers ? "1" : "0"); } catch {} renderExtras(); if (selected) openDrawer(selected); });
 document.querySelectorAll(".seg button[data-xk]").forEach(b => b.addEventListener("click", () => { xKind = b.dataset.xk; try { localStorage.setItem("rb-xkind", xKind); } catch {} renderExtras(); }));
 
 /* ---------- drawer ---------- */
@@ -738,6 +787,8 @@ function openDrawer(id){
       <div class="fact"><div class="k">Nights · pax</div><div class="v">${nights} · ${r.pax||"–"}</div></div>
     </div>`;
   b += `<div class="dsec"><h4>Pick-ups & drop-offs</h4>${r.transfers.length ? trList(r).map(x=>`<span class="tag t">${esc(x.t)} · ${fmt(x.day,{wd:true})}${x.time?" · <b>"+esc(x.time)+"</b>":""}</span>`).join("") : `<span class="empty">None noted</span>`}</div>`;
+  const tab = guestTab(r);
+  if (tab.lines.length) b += `<div class="dsec"><h4>Tab · additionals at 30% off</h4>${tabTable(tab)}<div class="foot" style="margin-top:6px">Prices from the PRICE LIST tab (Nov 2025) with 30% off, in euros.${chargeTransfers ? "" : " Pick-ups and drop-offs are not charged (switch in the Additionals panel)."}</div></div>`;
   if (exList) b += `<div class="dsec"><h4>Additionals</h4>${exList}<div class="foot" style="margin-top:6px">Extra sessions (the “+1” in the sheet) and extra nights (“add 1 night”).</div></div>`;
   b += `<div class="dsec"><h4>Add-ons</h4>${svc ? `<div class="svc">${svc}</div>` : `<span class="empty">${r.prevSeg ? "Logged on the first room of this stay" : "None noted"}</span>`}</div>`;
   if (r.notes) b += `<div class="dsec"><h4>Notes from the sheet</h4><div class="note">${esc(r.notes)}</div></div>`;
