@@ -699,12 +699,25 @@ function nightRate(r){
   if (room === "E") return pax > 1 ? {k:"Bamboo House double", p: PRICE.night.bambooDouble, per: pax} : {k:"Bamboo House single", p: PRICE.night.bambooSingle, per: 1};
   return {k:"Twin shared room (bed)", p: PRICE.night.shared, per: Math.max(r.rooms.length, 1)};
 }
-// the guest's tab: only what was added on top of the package
+// a guest's whole stay: every room segment linked by room moves and extensions
+function staySegs(r){
+  let a = r; while (a.prevSeg && a.prevSeg !== r) a = a.prevSeg;
+  const out = [a]; while (a.nextSeg && !out.includes(a.nextSeg)) { a = a.nextSeg; out.push(a); }
+  return out;
+}
+const stayNights = r => staySegs(r).reduce((n,s)=>n + s.end - s.start + 1, 0);
+const stayExtraNights = r => staySegs(r).reduce((n,s)=>n + (s.extraNights||0), 0);
+// the guest's tab: only what was added on top of the package, over the whole stay
 function guestTab(r){
-  const lines = [];
-  for (const [k,lbl] of SVC) if ((r.extra||{})[k] && PRICE[k]) lines.push({grp:"Extra sessions", lbl, qty: r.extra[k], unit: off(PRICE[k])});
-  if (r.extraNights){ const n = nightRate(r); lines.push({grp:"Extra nights", lbl: n.k + (n.per > 1 ? ` × ${n.per} people` : ""), qty: r.extraNights * n.per, unit: off(n.p), note: r.status==="Not yet confirmed" ? "not confirmed" : ""}); }
-  if (chargeTransfers) for (const x of trList(r)) lines.push({grp:"Pick-ups & drop-offs", lbl: x.t + (x.time ? " · " + x.time : ""), qty: 1, unit: off(PRICE[x.t] || 0)});
+  const lines = [], segs = staySegs(r), sess = {};
+  for (const s of segs) for (const k in (s.extra||{})) sess[k] = (sess[k]||0) + s.extra[k];
+  for (const [k,lbl] of SVC) if (sess[k] && PRICE[k]) lines.push({grp:"Extra sessions", lbl, qty: sess[k], unit: off(PRICE[k])});
+  for (const s of segs) if (s.extraNights){
+    const n = nightRate(s);
+    lines.push({grp:"Additional nights", lbl: `${s.extraNights} night${s.extraNights>1?"s":""} · ${n.k} (room ${s.rooms.join("/")})` + (n.per > 1 ? ` × ${n.per} people` : "") + ` · ${fmt(s.end - s.extraNights + 1)} – ${fmt(s.checkout)}`,
+      qty: s.extraNights * n.per, unit: off(n.p), note: s.status==="Not yet confirmed" ? "not confirmed" : ""});
+  }
+  if (chargeTransfers) for (const s of segs) for (const x of trList(s)) lines.push({grp:"Pick-ups & drop-offs", lbl: x.t + " · " + fmt(x.day) + (x.time ? " · " + x.time : ""), qty: 1, unit: off(PRICE[x.t] || 0)});
   lines.forEach(l => l.total = Math.round(l.qty * l.unit * 100) / 100);
   return {lines, total: Math.round(lines.reduce((a,l)=>a+l.total,0) * 100) / 100};
 }
@@ -725,19 +738,22 @@ const TR_ORDER = ["Airport pick up","GL pick up","Airport drop off","GL drop off
 const trList = r => [...r.transfers].filter(t => !(/pick/i.test(t) && r.prevSeg && r.prevSeg.transfers.includes(t)))
   .sort((a,b)=>TR_ORDER.indexOf(a)-TR_ORDER.indexOf(b))
   .map(t => ({t, time: (r.transferTimes||{})[t] || (/pick/i.test(t) ? r.time : ""), day: /pick/i.test(t) ? r.start : r.checkout}));
-const hasX = (r, kind) => (kind==="all"||kind==="sessions") && xCount(r) || (kind==="all"||kind==="nights") && r.extraNights || (kind==="all"||kind==="transfers") && trList(r).length;
+const hasX = (r, kind) => staySegs(r).some(s => (kind==="all"||kind==="sessions") && xCount(s) || (kind==="all"||kind==="nights") && s.extraNights || (kind==="all"||kind==="transfers") && trList(s).length);
 let xScope = "now", xKind = "all";
 try { const v = localStorage.getItem("rb-xscope"); if (["now","30","all"].includes(v)) xScope = v;
       const k = localStorage.getItem("rb-xkind"); if (["all","sessions","nights","transfers"].includes(k)) xKind = k; } catch {}
 function renderExtras(){
-  const inScope = r => xScope==="now" ? onNight(r,TODAY) : xScope==="30" ? (r.end >= TODAY && r.start <= TODAY+29) : true;
-  const list = DATA.filter(r => active(r) && isGuest(r) && hasX(r, xKind) && inScope(r)).sort((a,b)=>a.start-b.start);
+  const span = r => { const s = staySegs(r); return {start: s[0].start, end: s[s.length-1].end}; };
+  const inScope = r => { const p = span(r); return xScope==="now" ? (p.start <= TODAY && TODAY <= p.end) : xScope==="30" ? (p.end >= TODAY && p.start <= TODAY+29) : true; };
+  const list = DATA.filter(r => active(r) && isGuest(r) && staySegs(r)[0] === r && hasX(r, xKind) && inScope(r)).sort((a,b)=>a.start-b.start);
   const show = k => xKind==="all" || xKind===k;
   const tot = {}, trTot = {}; let nights = 0;
   for (const r of list){
-    if (show("sessions")) for (const k in r.extra) tot[k] = (tot[k]||0) + r.extra[k];
-    if (show("nights")) nights += r.extraNights || 0;
-    if (show("transfers")) for (const x of trList(r)) trTot[x.t] = (trTot[x.t]||0) + 1;
+    for (const s of staySegs(r)){
+      if (show("sessions")) for (const k in s.extra) tot[k] = (tot[k]||0) + s.extra[k];
+      if (show("nights")) nights += s.extraNights || 0;
+      if (show("transfers")) for (const x of trList(s)) trTot[x.t] = (trTot[x.t]||0) + 1;
+    }
   }
   const chips = [
     ...SVC.filter(([k])=>tot[k]).map(([k,lbl])=>`<span>${lbl} <b>+${tot[k]}</b></span>`),
@@ -750,12 +766,14 @@ function renderExtras(){
   const what = {all:"additionals", sessions:"extra sessions", nights:"extra nights", transfers:"pick-ups or drop-offs"}[xKind];
   const empty = {now:`No ${what} for guests in house tonight.`, "30":`No ${what} in the next 30 days.`, all:`No ${what} found in the sheet.`}[xScope];
   $("extras").innerHTML = `<div class="aday">` + (list.length ? list.map(r => {
-    const parts = [];
-    if (show("sessions")) SVC.filter(([k])=>r.extra[k]).forEach(([k,lbl]) => parts.push(`<span class="tag x">${lbl} +${r.extra[k]}</span>`));
-    if (show("nights") && r.extraNights) parts.push(`<span class="tag x">+${r.extraNights} night${r.extraNights>1?"s":""}${r.status==="Not yet confirmed"?" (not confirmed)":""}</span>`);
-    if (show("transfers")) trList(r).forEach(x => parts.push(`<span class="tag t">${esc(x.t)} · ${fmt(x.day)}${x.time?" · "+esc(x.time):""}</span>`));
+    const parts = [], segs = staySegs(r), sess = {};
+    for (const s of segs) for (const k in (s.extra||{})) sess[k] = (sess[k]||0) + s.extra[k];
+    if (show("sessions")) SVC.filter(([k])=>sess[k]).forEach(([k,lbl]) => parts.push(`<span class="tag x">${lbl} +${sess[k]}</span>`));
+    if (show("nights")) segs.filter(s=>s.extraNights).forEach(s => parts.push(`<span class="tag x">+${s.extraNights} night${s.extraNights>1?"s":""} (${s.rooms.join("/")})${s.status==="Not yet confirmed"?" · not confirmed":""}</span>`));
+    if (show("transfers")) segs.forEach(s => trList(s).forEach(x => parts.push(`<span class="tag t">${esc(x.t)} · ${fmt(x.day)}${x.time?" · "+esc(x.time):""}</span>`)));
+    const last = segs[segs.length-1], rooms = [...new Set(segs.flatMap(s=>s.rooms))];
     const tab = guestTab(r);
-    return `<button class="item" data-id="${esc(r.id)}"><span class="ic" style="color:var(--warn)">+</span><span class="who">${esc(r.guest)}${tab.total?` <span class="money">${eur(tab.total)}</span>`:""}</span><span class="rm">${esc(r.rooms.join("/"))}</span><span class="meta">${fmt(r.start)} – ${fmt(r.checkout)}<br>${parts.join("")}</span></button>`;
+    return `<button class="item" data-id="${esc(r.id)}"><span class="ic" style="color:var(--warn)">+</span><span class="who">${esc(r.guest)}${tab.total?` <span class="money">${eur(tab.total)}</span>`:""}</span><span class="rm">${esc(rooms.join("/"))}</span><span class="meta">${fmt(r.start)} – ${fmt(last.checkout)}<br>${parts.join("")}</span></button>`;
   }).join("") : `<div class="empty">${empty}</div>`) + `</div>`;
   document.querySelectorAll(".seg button[data-x]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.x===xScope)));
   document.querySelectorAll(".seg button[data-xk]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.xk===xKind)));
@@ -786,11 +804,11 @@ function openDrawer(id){
   let b = `<div class="facts">
       <div class="fact"><div class="k">Check-in</div><div class="v">${fmt(r.start,{wd:true})}</div></div>
       <div class="fact"><div class="k">Check-out</div><div class="v">${fmt(r.checkout,{wd:true})}</div></div>
-      <div class="fact"><div class="k">Nights · pax</div><div class="v">${nights} · ${r.pax||"–"}</div></div>
+      <div class="fact"><div class="k">Nights · pax</div><div class="v">${nights} · ${r.pax||"–"}</div>${staySegs(r).length>1||stayExtraNights(r)?`<div class="k" style="margin-top:2px">Whole stay ${stayNights(r)}${stayExtraNights(r)?` · <b style="color:var(--warn)">+${stayExtraNights(r)} extra</b>`:""}</div>`:""}</div>
     </div>`;
   b += `<div class="dsec"><h4>Pick-ups & drop-offs</h4>${r.transfers.length ? trList(r).map(x=>`<span class="tag t">${esc(x.t)} · ${fmt(x.day,{wd:true})}${x.time?" · <b>"+esc(x.time)+"</b>":""}</span>`).join("") : `<span class="empty">None noted</span>`}</div>`;
   const tab = guestTab(r);
-  if (tab.lines.length) b += `<div class="dsec"><h4>Tab · additionals at 30% off</h4>${tabTable(tab)}<div class="foot" style="margin-top:6px">Prices from the PRICE LIST tab (Nov 2025) with 30% off, in euros.${chargeTransfers ? "" : " Pick-ups and drop-offs are not charged (switch in the Additionals panel)."}</div></div>`;
+  if (tab.lines.length) b += `<div class="dsec"><h4>Tab · additionals at 30% off${staySegs(r).length>1?" · whole stay":""}</h4>${tabTable(tab)}<div class="foot" style="margin-top:6px">Prices from the PRICE LIST tab (Nov 2025) with 30% off, in euros.${chargeTransfers ? "" : " Pick-ups and drop-offs are not charged (switch in the Additionals panel)."}</div></div>`;
   if (exList) b += `<div class="dsec"><h4>Additionals</h4>${exList}<div class="foot" style="margin-top:6px">Extra sessions (the “+1” in the sheet) and extra nights (“add 1 night”).</div></div>`;
   b += `<div class="dsec"><h4>Add-ons</h4>${svc ? `<div class="svc">${svc}</div>` : `<span class="empty">${r.prevSeg ? "Logged on the first room of this stay" : "None noted"}</span>`}</div>`;
   if (r.notes) b += `<div class="dsec"><h4>Notes from the sheet</h4><div class="note">${esc(r.notes)}</div></div>`;
