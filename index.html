@@ -721,9 +721,11 @@ function tabTable(t){
 // sessions written as "S - 1+1", extra nights ("add 1 night"), and transfers with their times
 const xCount = r => Object.values(r.extra||{}).reduce((a,n)=>a+n,0);
 const TR_ORDER = ["Airport pick up","GL pick up","Airport drop off","GL drop off"];
-const trList = r => [...r.transfers].sort((a,b)=>TR_ORDER.indexOf(a)-TR_ORDER.indexOf(b))
+// after a room move, a pick-up already on the guest's first room is the same trip, not a second one
+const trList = r => [...r.transfers].filter(t => !(/pick/i.test(t) && r.prevSeg && r.prevSeg.transfers.includes(t)))
+  .sort((a,b)=>TR_ORDER.indexOf(a)-TR_ORDER.indexOf(b))
   .map(t => ({t, time: (r.transferTimes||{})[t] || (/pick/i.test(t) ? r.time : ""), day: /pick/i.test(t) ? r.start : r.checkout}));
-const hasX = (r, kind) => (kind==="all"||kind==="sessions") && xCount(r) || (kind==="all"||kind==="nights") && r.extraNights || (kind==="all"||kind==="transfers") && r.transfers.length;
+const hasX = (r, kind) => (kind==="all"||kind==="sessions") && xCount(r) || (kind==="all"||kind==="nights") && r.extraNights || (kind==="all"||kind==="transfers") && trList(r).length;
 let xScope = "now", xKind = "all";
 try { const v = localStorage.getItem("rb-xscope"); if (["now","30","all"].includes(v)) xScope = v;
       const k = localStorage.getItem("rb-xkind"); if (["all","sessions","nights","transfers"].includes(k)) xKind = k; } catch {}
@@ -735,7 +737,7 @@ function renderExtras(){
   for (const r of list){
     if (show("sessions")) for (const k in r.extra) tot[k] = (tot[k]||0) + r.extra[k];
     if (show("nights")) nights += r.extraNights || 0;
-    if (show("transfers")) for (const t of r.transfers) trTot[t] = (trTot[t]||0) + 1;
+    if (show("transfers")) for (const x of trList(r)) trTot[x.t] = (trTot[x.t]||0) + 1;
   }
   const chips = [
     ...SVC.filter(([k])=>tot[k]).map(([k,lbl])=>`<span>${lbl} <b>+${tot[k]}</b></span>`),
