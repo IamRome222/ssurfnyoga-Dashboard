@@ -184,6 +184,29 @@ h1{font-family:var(--display);font-weight:700;font-size:clamp(28px,3.4vw,40px);l
 .xtot b{color:var(--warn);font-family:var(--mono)}
 .tag.x{background:var(--warn-soft);border-color:transparent;color:var(--ink)}
 .xfilter{padding:10px 16px 0}
+.act-scroll{overflow-x:auto}
+table.act{width:100%;border-collapse:collapse;font-size:13.5px}
+table.act th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.act td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.act tr:last-child td{border-bottom:0}
+table.act td.g{min-width:170px}
+table.act td.g b{font-weight:600;font-size:14px;cursor:pointer}
+table.act td.g .rm{font-family:var(--mono);font-size:11.5px;background:var(--paper);border:1px solid var(--line);border-radius:5px;padding:0 5px;margin-left:6px}
+.ticks{display:flex;flex-wrap:wrap;align-items:center;gap:4px;min-width:120px}
+.tick{width:22px;height:22px;border:1.5px solid var(--line);border-radius:6px;background:var(--surface);cursor:pointer;display:inline-grid;place-items:center;padding:0;font-size:13px;line-height:1;color:var(--surface)}
+.tick:hover{border-color:var(--accent)}
+.tick.on{background:var(--accent);border-color:var(--accent)}
+.tick.xtra{border-style:dashed}
+.tick.xtra.on{background:var(--warn);border-color:var(--warn)}
+.tick.add{color:var(--muted);border-style:dashed;font-weight:600}
+.tick.add:hover{color:var(--ink)}
+.cnt{font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-left:4px}
+.cnt.full{color:#2E9E5B;font-weight:600}
+.act-note{padding:10px 16px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+.act-note.warn{color:var(--warn)}
+.phone{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.phone .num{font-family:var(--mono);font-size:15px;font-weight:600}
+.phone .btn{padding:4px 10px;font-size:13px}
 .bill{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
 .bill td{padding:5px 0;border-bottom:1px solid var(--line);vertical-align:top}
 .bill td.n{text-align:right;white-space:nowrap;padding-left:10px}
@@ -268,6 +291,12 @@ h1{font-family:var(--display);font-weight:700;font-size:clamp(28px,3.4vw,40px);l
       <p class="foot" id="foot"></p>
     </aside>
   </div>
+
+  <section class="panel" aria-labelledby="actTitle">
+    <div class="panel-head"><h2 id="actTitle">Activities</h2><span class="foot" id="actInfo"></span></div>
+    <div class="act-scroll"><table class="act" id="act"></table></div>
+    <div class="act-note" id="actNote"></div>
+  </section>
 </div>
 
 <div class="scrim" id="scrim"></div>
@@ -515,6 +544,8 @@ function linkSegments(out){
 if (typeof module !== "undefined") module.exports = {parseSheet, readCell, colorKey};
 
 
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxR0xLrBg0j4Fh4k1UcpOsvKXyfsVVOZLXI7DrKuCvJR4TyNwL-cG0B022_8a6DOfTbnw/exec";   // paste your Apps Script /exec URL here (see README)
+
 const ROOMS = [
   {g:"Private rooms", id:"A", sub:"Private room"},
   {g:"Private rooms", id:"B", sub:"Private room"},
@@ -657,7 +688,7 @@ function itemHtml(r, kind){
   let meta = "";
   if (kind==="in"){
     const tr = trList(r).filter(x=>/pick/i.test(x.t)).map(x => x.t + (x.time ? " " + x.time : ""));
-    meta = [r.pkg && (PK[r.pkg]?.s||r.pkg), tr.join(", "), r.status==="Not yet confirmed"?"not confirmed":""].filter(Boolean).join(" · ");
+    meta = [r.pkg && (PK[r.pkg]?.s||r.pkg), tr.join(", "), phoneFor(r)?.phone, r.status==="Not yet confirmed"?"not confirmed":""].filter(Boolean).join(" · ");
   } else if (kind==="out"){
     const tr = trList(r).filter(x=>/drop/i.test(x.t)).map(x => x.t + (x.time ? " " + x.time : ""));
     meta = [tr.join(", "), r.extras].filter(Boolean).join(" · ") || "Check-out";
@@ -765,6 +796,109 @@ $("xTr").checked = chargeTransfers;
 $("xTr").addEventListener("change", e => { chargeTransfers = e.target.checked; try { localStorage.setItem("rb-xtr", chargeTransfers ? "1" : "0"); } catch {} renderExtras(); if (selected) openDrawer(selected); });
 document.querySelectorAll(".seg button[data-xk]").forEach(b => b.addEventListener("click", () => { xKind = b.dataset.xk; try { localStorage.setItem("rb-xkind", xKind); } catch {} renderExtras(); }));
 
+/* ---------- guest phones: "Guest phones" tab in the private copy of the booking map ---------- */
+const PHONE_SHEET = "1Ea1bH17heMyT8LHmT19-tthqGgQY5WcYphvMxoUC-jE";
+const PHONE_INPUT = { spreadsheetId: PHONE_SHEET, ranges: ["'Guest phones'!A1:D500"], includeGridData: true,
+  fields: ["sheets.data.rowData.values.formattedValue"] };
+let PHONES = {};
+function parsePhones(res){
+  const sheets = extractSheets(res); if (!sheets) return null;
+  const out = {};
+  for (const sh of sheets) for (const block of sh.data || []) for (const row of block.rowData || []){
+    const v = (row.values || []).map(c => String((c && c.formattedValue) ?? "").trim());
+    const bk = (v[0] || "").replace(/^\d{4}-/, "");
+    if (/^\d{3,5}$/.test(bk) && v[3]) out[bk] = {booker: v[2], phone: v[3], ref: v[1]};
+  }
+  return out;
+}
+const phoneFor = r => { for (let s = r, i = 0; s && i < 6; s = s.prevSeg, i++) if (s.bk && PHONES[s.bk]) return PHONES[s.bk]; return null; };
+
+/* ---------- activities checklist ----------
+   One row per guest in house (whole stay, room moves included). Boxes per activity = sessions booked in
+   the sheet (package + "+1" extras); "+" adds an unbooked session. Ticks are shared through the Apps Script
+   ("Activities" tab in the sheet); until that is available they stay in this browser. */
+const ACTS = [["SIB","Sauna & Ice Bath"],["S","Surfing"],["Y","Yoga"],["M","Massage"],["L","Laundry"]];
+let ACT = {}, ACT_LOCAL = {}, actShared = false, actError = "";
+try { ACT_LOCAL = JSON.parse(localStorage.getItem("rb-act") || "{}") || {}; } catch {}
+const saveLocal = () => { try { localStorage.setItem("rb-act", JSON.stringify(ACT_LOCAL)); } catch {} };
+const isoDay = n => new Date(n*864e5).toISOString().slice(0,10);
+function stayChain(r){
+  let a = r; for (let i=0; i<8 && a.prevSeg; i++) a = a.prevSeg;
+  const segs = [a]; for (let b = a, i=0; i<8 && b.nextSeg; i++){ b = b.nextSeg; segs.push(b); }
+  return segs;
+}
+const actKey = first => (first.bk ? "#" + first.bk : first.guest) + "|" + isoDay(first.start);
+function currentStays(){
+  const seen = new Set(), out = [];
+  for (const r of DATA){
+    if (!active(r) || !isGuest(r)) continue;
+    const segs = stayChain(r), f = segs[0], l = segs[segs.length-1];
+    if (!(f.start <= TODAY && TODAY <= l.checkout)) continue;
+    const key = actKey(f); if (seen.has(key)) continue; seen.add(key);
+    const booked = {};
+    for (const s of segs){ for (const c in s.svc) booked[c] = (booked[c]||0) + s.svc[c]; for (const c in (s.extra||{})) booked[c] = (booked[c]||0) + s.extra[c]; }
+    const now = segs.find(s => s.start <= TODAY && TODAY <= s.end) || l;
+    out.push({key, guest: f.guest, pax: f.pax, rooms: now.rooms, start: f.start, checkout: l.checkout, booked, leaving: l.checkout === TODAY, arriving: f.start === TODAY, id: now.id});
+  }
+  const order = id => { const i = ROOMS.findIndex(x => x.id === id); return i < 0 ? 99 : i; };
+  return out.sort((a,b) => order(a.rooms[0]) - order(b.rooms[0]) || a.start - b.start);
+}
+const doneOf = (key, code) => { const k = key + "|" + code; return ACT_LOCAL[k] != null ? ACT_LOCAL[k] : (ACT[k] || 0); };
+function loadActivities(list){
+  actShared = true; actError = "";
+  ACT = {}; for (const a of list || []) ACT[a.key + "|" + a.code] = a.done;
+  for (const k in ACT_LOCAL) if ((ACT[k] || 0) === ACT_LOCAL[k]) delete ACT_LOCAL[k];
+  saveLocal();
+}
+async function setDone(st, code, v){
+  const k = st.key + "|" + code;
+  ACT_LOCAL[k] = v; saveLocal(); renderActivities();
+  if (typeof SCRIPT_URL === "undefined" || !SCRIPT_URL) return;
+  try {
+    const r = await fetch(SCRIPT_URL, {method: "POST", headers: {"Content-Type": "text/plain;charset=utf-8"},
+      body: JSON.stringify({key: st.key, code, done: v, guest: st.guest})});
+    const j = await r.json();
+    if (!j || !j.ok) throw new Error((j && j.error) || "not saved");
+    loadActivities(j.activities);
+  } catch (e) { actShared = false; actError = String(e.message || e); }
+  renderActivities();
+}
+function renderActivities(){
+  const stays = currentStays();
+  $("actInfo").textContent = `${fmt(TODAY,{wd:true})} · ${stays.length} guest stay${stays.length===1?"":"s"} in house`;
+  let h = `<thead><tr><th>Guest</th>${ACTS.map(([,l])=>`<th>${l}</th>`).join("")}</tr></thead><tbody>`;
+  if (!stays.length) h += `<tr><td colspan="${ACTS.length+1}" class="empty">No guests in house today.</td></tr>`;
+  stays.forEach((st, si) => {
+    h += `<tr><td class="g"><b data-id="${esc(st.id)}">${esc(st.guest)}</b><span class="rm">${esc(st.rooms.join("/"))}</span>`
+      + `<div class="foot">${fmt(st.start)} – ${fmt(st.checkout)}${st.arriving?" · arrived today":""}${st.leaving?" · leaves today":""}</div></td>`;
+    for (const [c] of ACTS){
+      const booked = st.booked[c] || 0, done = doneOf(st.key, c), n = Math.max(booked, done);
+      let boxes = "";
+      for (let i = 0; i < n; i++) boxes += `<button type="button" class="tick${i < done ? " on" : ""}${i >= booked ? " xtra" : ""}" data-s="${si}" data-c="${c}" data-i="${i}" aria-label="${esc(st.guest)}: ${c} session ${i+1}${i < done ? ", done" : ""}">${i < done ? "✓" : ""}</button>`;
+      boxes += `<button type="button" class="tick add" data-s="${si}" data-c="${c}" data-add="1" title="Add a session that wasn't booked" aria-label="${esc(st.guest)}: add ${c} session">+</button>`;
+      const cnt = !n ? "" : !booked ? `<span class="cnt">${done} extra</span>`
+        : `<span class="cnt${done >= booked ? " full" : ""}">${done}/${booked}${done > booked ? " +" + (done - booked) + " extra" : ""}</span>`;
+      h += `<td><div class="ticks">${boxes}${cnt}</div></td>`;
+    }
+    h += `</tr>`;
+  });
+  $("act").innerHTML = h + `</tbody>`;
+  $("act").__stays = stays;
+  const pending = Object.keys(ACT_LOCAL).length;
+  const note = $("actNote");
+  if (typeof SCRIPT_URL !== "undefined" && SCRIPT_URL && actShared && !pending){ note.className = "act-note"; note.textContent = "Saved to the Activities tab in the sheet, so everyone sees the same ticks. Boxes = sessions booked in the sheet; dashed boxes are extra sessions."; }
+  else if (typeof SCRIPT_URL !== "undefined" && SCRIPT_URL){ note.className = "act-note warn"; note.textContent = `Ticks are saved in this browser only${pending ? " (" + pending + " not yet in the sheet)" : ""}. To share them with the team, update the Apps Script (see README).${actError ? " Last error: " + actError : ""}`; }
+  else { note.className = "act-note"; note.textContent = "Ticks are saved in this browser."; }
+}
+$("act").addEventListener("click", e => {
+  const t = e.target.closest(".tick"); if (!t) return;
+  e.stopPropagation();
+  const st = $("act").__stays[Number(t.dataset.s)], c = t.dataset.c, done = doneOf(st.key, c);
+  if (t.dataset.add) return setDone(st, c, done + 1);
+  const i = Number(t.dataset.i);
+  setDone(st, c, i < done ? i : i + 1);
+});
+
 /* ---------- drawer ---------- */
 function openDrawer(id){
   const r = DATA.find(x=>x.id===id); if (!r) return;
@@ -788,6 +922,15 @@ function openDrawer(id){
       <div class="fact"><div class="k">Check-out</div><div class="v">${fmt(r.checkout,{wd:true})}</div></div>
       <div class="fact"><div class="k">Nights · pax</div><div class="v">${nights} · ${r.pax||"–"}</div></div>
     </div>`;
+  const ph = phoneFor(r);
+  if (ph){
+    const digits = ph.phone.replace(/[^\d]/g, "");
+    b += `<div class="dsec"><h4>Contact${ph.booker ? " · " + esc(ph.booker) : ""}</h4><div class="phone"><span class="num">${esc(ph.phone)}</span>`
+      + `<a class="btn" href="https://wa.me/${digits}" target="_blank" rel="noopener">WhatsApp ↗</a>`
+      + `<a class="btn" href="tel:+${digits}">Call</a>`
+      + `<button class="btn" type="button" id="copyPhone">Copy</button></div>`
+      + `<div class="foot" style="margin-top:6px">From Bookinglayer${ph.ref ? " booking " + esc(ph.ref) : ""}.</div></div>`;
+  }
   b += `<div class="dsec"><h4>Pick-ups & drop-offs</h4>${r.transfers.length ? trList(r).map(x=>`<span class="tag t">${esc(x.t)} · ${fmt(x.day,{wd:true})}${x.time?" · <b>"+esc(x.time)+"</b>":""}</span>`).join("") : `<span class="empty">None noted</span>`}</div>`;
   const tab = guestTab(r);
   if (tab.lines.length) b += `<div class="dsec"><h4>Tab · additionals at 30% off</h4>${tabTable(tab)}<div class="foot" style="margin-top:6px">Prices from the PRICE LIST tab (Nov 2025) with 30% off, in euros.${chargeTransfers ? "" : " Pick-ups and drop-offs are not charged (switch in the Additionals panel)."}</div></div>`;
@@ -797,6 +940,8 @@ function openDrawer(id){
   if (rel.length) b += `<div class="dsec"><h4>Same booking</h4><div class="rel">${rel.map(x=>`<button data-id="${esc(x.id)}"><span><b>${esc(x.guest)}</b> · ${esc(x.rooms.join("/"))}</span><span class="foot">${fmt(x.start)} – ${fmt(x.checkout)}</span></button>`).join("")}</div></div>`;
   if (r.url) b += `<a class="btn primary" href="${esc(r.url)}" target="_blank" rel="noopener">Open this cell in the sheet ↗</a>`;
   $("dBody").innerHTML = b;
+  const cp = $("copyPhone");
+  if (cp) cp.addEventListener("click", async () => { try { await navigator.clipboard.writeText(ph.phone); cp.textContent = "Copied"; } catch { cp.textContent = "Select and copy"; } });
   document.querySelectorAll(".bar.sel").forEach(e=>e.classList.remove("sel"));
   document.querySelectorAll(`.bar[data-id="${CSS.escape(id)}"]`).forEach(e=>e.classList.add("sel"));
   $("dClose").focus();
@@ -808,7 +953,7 @@ function closeDrawer(){
   document.querySelectorAll(".bar.sel").forEach(e=>e.classList.remove("sel"));
 }
 
-function renderAll(){ renderKpis(); renderBoard(); renderLegend(); renderAgenda(); renderExtras();
+function renderAll(){ renderKpis(); renderBoard(); renderLegend(); renderAgenda(); renderExtras(); renderActivities();
   $("foot").textContent = DATA.length ? `${DATA.length} stays read from the booking map. Edit bookings in the sheet; this board follows it.` : ""; }
 
 /* ---------- events ---------- */
@@ -847,7 +992,6 @@ setSync("", "Connecting to the sheet…");
    Two ways in:
    1. SCRIPT_URL set  -> fetch JSON from the Google Apps Script web app (works on GitHub Pages / any host)
    2. otherwise       -> the viewer's Google Sheets connector, when opened as a claude.ai artifact      */
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxR0xLrBg0j4Fh4k1UcpOsvKXyfsVVOZLXI7DrKuCvJR4TyNwL-cG0B022_8a6DOfTbnw/exec";   // paste your Apps Script /exec URL here (see README)
 const SERVER = "Google Sheets", TOOL = "get_spreadsheet", POLL_MS = 60000;
 let lastGood = null, refresh = () => {};
 function apply(res, storedAt){
@@ -855,6 +999,7 @@ function apply(res, storedAt){
   try { rows = parseSheet(res); } catch (e) { console.error(e); }
   if (!rows){ setSync("warn", "The sheet sent an answer the board can't read" + (lastGood ? " · last sync " + hhmm(lastGood) : ""), {label:"Try again", fn: () => refresh()}); return; }
   DATA = rows; lastGood = storedAt || Date.now();
+  if (res && Array.isArray(res.activities)) loadActivities(res.activities);
   notice(""); renderAll();
   if (selected) openDrawer(selected);
   setSync("live", `Live from Google Sheets · ${hhmm(lastGood)}`, {label:"Refresh", fn: () => refresh()});
@@ -901,6 +1046,11 @@ if (SCRIPT_URL){
       default: fail("Couldn't reach Google Sheets just now", {label:"Try again", fn: () => refresh()});
     }
   }
+  mcp.watchTool(SERVER, TOOL, PHONE_INPUT, ev => {
+    if (ev.type !== "data") return;               // phones are optional: the board works without them
+    const p = parsePhones(ev.result); if (!p) return;
+    PHONES = p; renderAgenda(); if (selected) openDrawer(selected);
+  }, {cache:{staleTime: 60000, gcTime: 86400000}, refetchInterval: 600000});
   mcp.watchTool(SERVER, TOOL, SHEET_INPUT, ev => {
     if (ev.type === "data") apply(ev.result, ev.result && ev.result.cache && ev.result.cache.storedAt); else onError(ev.error);
   }, {cache:{staleTime: 30000, gcTime: 86400000}, refetchInterval: POLL_MS});
