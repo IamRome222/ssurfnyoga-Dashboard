@@ -435,7 +435,7 @@ function parseSheet(res){
           if (!cells[0].c) continue;
           if (!grid.has(day)) grid.set(day, {});
           if (grid.get(day)[room.id]) continue;             // first tab wins on overlapping dates
-          grid.get(day)[room.id] = {color: cells[0].c, head: cells[0].t, texts: cells.map(c=>c.t).filter(Boolean), gid, row: start+i+1, col: room.cols[0]};
+          grid.get(day)[room.id] = {color: cells[0].c, head: cells[0].t, texts: cells.map(c=>c.t).filter(Boolean), slots: cells.map(c=>c.t), gid, row: start+i+1, col: room.cols[0]};
         }
       });
     }
@@ -455,9 +455,15 @@ function parseSheet(res){
       const head = readCell(cell.head);
       const isPick = info.some(x => x.tr.some(t => /pick/i.test(t)));
       if (cur && (cell.color !== cur.color || (head.name && cur.name) || (isPick && !head.name && d - cur.start >= 2))) close();
-      if (!cur) cur = {room, rooms:[room], color: cell.color, start: d, end: d, name:"", bk:"", move:false, tr:new Set(), tt:{}, time:"", svc:{}, extra:{}, nights:0, notes:[], gid: cell.gid, row: cell.row, col: cell.col};
+      if (!cur) cur = {room, rooms:[room], color: cell.color, start: d, end: d, name:"", bk:"", move:false, tr:new Set(), tt:{}, time:"", svc:{}, extra:{}, parts:[], nights:0, notes:[], gid: cell.gid, row: cell.row, col: cell.col};
       cur.end = d;
       if (head.name && !cur.name){ cur.name = head.name; if (cur.start !== d){ cur.start = d; cur.row = cell.row; } }
+      // sessions per column ("part"): in A/B the second column is usually the second guest
+      cell.slots.forEach((t, si) => {
+        const x = readCell(t), p = cur.parts[si] || (cur.parts[si] = {svc:{}, extra:{}});
+        for (const k in x.svc) p.svc[k] = (p.svc[k]||0) + x.svc[k];
+        for (const k in x.extra) p.extra[k] = (p.extra[k]||0) + x.extra[k];
+      });
       for (const x of info){
         if (x.bk && !cur.bk) cur.bk = x.bk;
         if (x.move) cur.move = true;
@@ -486,6 +492,7 @@ function parseSheet(res){
       r.tr.forEach(t => host.tr.add(t)); if (!host.time) host.time = r.time;
       for (const k in r.tt) if (!host.tt[k]) host.tt[k] = r.tt[k];
       host.nights += r.nights;
+      host.parts.push(...r.parts);          // the other bed's sessions belong to the second guest
       for (const k in r.svc) host.svc[k] = (host.svc[k]||0) + r.svc[k];
       for (const k in r.extra) host.extra[k] = (host.extra[k]||0) + r.extra[k];
       host.notes.push(...r.notes); r.merged = true; continue;
@@ -520,7 +527,7 @@ function parseSheet(res){
       transfers: [...r.tr], transferTimes: r.tt, time: r.time,
       // nights added on top of the stay: the number written in the sheet ("add 2 nights"), or the length of a nameless extension
       extraNights: r.nights || (r.ext ? r.end - r.start + 1 : 0), notes: [...new Set(r.notes)].join("\n"), extras: "",
-      start: r.start, end: r.end, checkout: r.end + 1, svc: r.svc, extra: r.extra
+      start: r.start, end: r.end, checkout: r.end + 1, svc: r.svc, extra: r.extra, parts: r.parts.filter(Boolean)
     });
   }
   // room moves: carry the booking # across to the next room
@@ -827,6 +834,20 @@ function stayChain(r){
   const segs = [a]; for (let b = a, i=0; i<8 && b.nextSeg; i++){ b = b.nextSeg; segs.push(b); }
   return segs;
 }
+const splitNames = g => String(g).split(/\s*(?:,|&|\band\b)\s*/i).map(x => x.trim()).filter(Boolean);
+// sessions per person: one column/bed each when the sheet has exactly one per person, otherwise shared out evenly
+function perPerson(segs, names){
+  const n = names.length, slots = [];
+  for (const s of segs) (s.parts || []).forEach((p, i) => {
+    const q = slots[i] || (slots[i] = {});
+    for (const k in p.svc) q[k] = (q[k]||0) + p.svc[k];
+    for (const k in (p.extra||{})) q[k] = (q[k]||0) + p.extra[k];
+  });
+  const used = slots.filter(q => q && Object.keys(q).length);
+  if (used.length === n) return used;
+  const total = {}; for (const q of used) for (const k in q) total[k] = (total[k]||0) + q[k];
+  return names.map((_, i) => { const o = {}; for (const k in total){ const b = Math.floor(total[k] / n), r = total[k] % n; o[k] = b + (i < r ? 1 : 0); } return o; });
+}
 const actKey = first => (first.bk ? "#" + first.bk : first.guest) + "|" + isoDay(first.start);
 function currentStays(){
   const seen = new Set(), out = [];
@@ -838,7 +859,12 @@ function currentStays(){
     const booked = {};
     for (const s of segs){ for (const c in s.svc) booked[c] = (booked[c]||0) + s.svc[c]; for (const c in (s.extra||{})) booked[c] = (booked[c]||0) + s.extra[c]; }
     const now = segs.find(s => s.start <= TODAY && TODAY <= s.end) || l;
-    out.push({key, guest: f.guest, pax: f.pax, rooms: now.rooms, start: f.start, checkout: l.checkout, booked, leaving: l.checkout === TODAY, arriving: f.start === TODAY, id: now.id});
+    const base = {pax: f.pax, rooms: now.rooms, start: f.start, checkout: l.checkout, leaving: l.checkout === TODAY, arriving: f.start === TODAY, id: now.id};
+    const names = splitNames(f.guest);
+    if (names.length < 2) { out.push({...base, key, guest: f.guest, booked}); continue; }
+    // "Lea and Katja": one row each, with their own sessions where the sheet has them per bed/column
+    const each = perPerson(segs, names);
+    names.forEach((nm, i) => out.push({...base, key: key + "|" + nm, guest: nm, group: f.guest, booked: each[i]}));
   }
   const order = id => { const i = ROOMS.findIndex(x => x.id === id); return i < 0 ? 99 : i; };
   return out.sort((a,b) => order(a.rooms[0]) - order(b.rooms[0]) || a.start - b.start);
@@ -865,12 +891,12 @@ async function setDone(st, code, v){
 }
 function renderActivities(){
   const stays = currentStays();
-  $("actInfo").textContent = `${fmt(TODAY,{wd:true})} · ${stays.length} guest stay${stays.length===1?"":"s"} in house`;
+  $("actInfo").textContent = `${fmt(TODAY,{wd:true})} · ${stays.length} guest${stays.length===1?"":"s"} in house`;
   let h = `<thead><tr><th>Guest</th>${ACTS.map(([,l])=>`<th>${l}</th>`).join("")}</tr></thead><tbody>`;
   if (!stays.length) h += `<tr><td colspan="${ACTS.length+1}" class="empty">No guests in house today.</td></tr>`;
   stays.forEach((st, si) => {
     h += `<tr><td class="g"><b data-id="${esc(st.id)}">${esc(st.guest)}</b><span class="rm">${esc(st.rooms.join("/"))}</span>`
-      + `<div class="foot">${fmt(st.start)} – ${fmt(st.checkout)}${st.arriving?" · arrived today":""}${st.leaving?" · leaves today":""}</div></td>`;
+      + `<div class="foot">${st.group ? "with " + esc(splitNames(st.group).filter(x => x !== st.guest).join(", ")) + " · " : ""}${fmt(st.start)} – ${fmt(st.checkout)}${st.arriving?" · arrived today":""}${st.leaving?" · leaves today":""}</div></td>`;
     for (const [c] of ACTS){
       const booked = st.booked[c] || 0, done = doneOf(st.key, c), n = Math.max(booked, done);
       let boxes = "";
